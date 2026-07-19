@@ -187,7 +187,9 @@ def next_question():
     if subtopic:
         query = query.filter(Question.subtopic == subtopic)
     if course:
-        query = query.filter(Question.course == course)
+        hierarchy = {'adv': ['adv'], 'mx1': ['mx1', 'adv'], 'mx2': ['mx2', 'mx1', 'adv']}
+        courses = hierarchy.get(course, [course])
+        query = query.filter(Question.course.in_(courses))
 
     all_questions = query.order_by(Question.difficulty).all()
 
