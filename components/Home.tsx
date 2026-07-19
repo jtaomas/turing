@@ -438,106 +438,90 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
 
   const handleGenerate = async (directTopicId?: string, directSubtopic?: string | null, directCourse?: string) => {
     setProblemLoading(true);
-    let tName = '', sName = '', question = '';
+    setCurrentProblem('');
+    let question = '';
+    let tName = '';
+    let sName = '';
     let chosenTopicId = directTopicId ?? selectedTopicId;
     let chosenSubtopic = directSubtopic !== undefined ? directSubtopic : selectedSubtopic;
     const effectiveCourse = directCourse ?? courseId;
 
-    try {
-      const params: { topic_id?: string; subtopic?: string; course?: string; limit?: number } = {
-        course: effectiveCourse,
-        limit: 1,
-      };
-      if (chosenTopicId) params.topic_id = chosenTopicId;
-      if (chosenSubtopic) params.subtopic = chosenSubtopic;
-
-      const result = await getNextQuestion(params);
-      if (result.questions && result.questions.length > 0) {
-        const q = result.questions[0];
-        question = q.question_text;
-        tName = q.topic_id;
-        sName = q.subtopic || '';
-        chosenTopicId = q.topic_id;
-        chosenSubtopic = q.subtopic || null;
-        setCurrentQuestionId(q.question_id);
-      }
-    } catch { /* fallback below */ }
-
-    if (!question) {
-      let pool: string[] = [];
-      const topic = chosenTopicId ? (currentTopic || allTopics.find(t => t.id === chosenTopicId)) : null;
-      if (topic) {
-        tName = topic.name;
-        const sub = chosenSubtopic;
-        if (sub && topic.problemsBySubtopic?.[sub]) { pool = topic.problemsBySubtopic[sub]; sName = sub; }
-        else pool = topic.problems;
-      } else {
-        const rt = allTopics[Math.floor(Math.random() * allTopics.length)];
-        if (rt) {
-          tName = rt.name;
-          const subs = rt.subtopics || [];
-          if (subs.length > 0 && Math.random() > 0.4) {
-            sName = subs[Math.floor(Math.random() * subs.length)];
-            chosenSubtopic = sName;
-            pool = rt.problemsBySubtopic?.[sName] || rt.problems;
-          } else pool = rt.problems;
-          chosenTopicId = rt.id;
-        }
-      }
+    const pickFromPool = (pool: string[], topicName: string, subtopicName: string) => {
       const fresh = pool.filter(q => !shownQuestions.current.has(q.trim().replace(/\s+/g, ' ')));
-      const usePool = fresh.length > 0 ? fresh : pool;
-      const matchingTopic = allTopics.find(t => t.name === tName);
-      if (matchingTopic && FEATURED_LATEX[matchingTopic.id]) {
-        const featFresh = FEATURED_LATEX[matchingTopic.id].filter(q => !shownQuestions.current.has(q.trim().replace(/\s+/g, ' ')));
-        question = (featFresh.length > 0 ? featFresh : FEATURED_LATEX[matchingTopic.id])[Math.floor(Math.random() * (featFresh.length > 0 ? featFresh.length : FEATURED_LATEX[matchingTopic.id].length))];
-      } else if (usePool.length > 0) {
-        question = autoFormatMath(usePool[Math.floor(Math.random() * usePool.length)]);
+      const use = fresh.length > 0 ? fresh : pool;
+      const picked = use[Math.floor(Math.random() * use.length)];
+      shownQuestions.current.add(picked.trim().replace(/\s+/g, ' '));
+      localStorage.setItem('turing_shown_questions', JSON.stringify([...shownQuestions.current]));
+      return { question: autoFormatMath(picked), tName: topicName, sName: subtopicName };
+    };
+
+    const topics = allTopics;
+    const topic = chosenTopicId ? topics.find(t => t.id === chosenTopicId) : null;
+
+    if (topic) {
+      const sub = chosenSubtopic;
+      const pool = (sub && topic.problemsBySubtopic?.[sub]) ? topic.problemsBySubtopic[sub] : topic.problems;
+      if (pool.length > 0) {
+        const picked = pickFromPool(pool, topic.name, sub || '');
+        question = picked.question; tName = picked.tName; sName = picked.sName;
       }
     }
 
-    question = question || 'Solve for x: $2x^2 - 5x + 2 = 0$';
-    shownQuestions.current.add(question.trim().replace(/\s+/g, ' '));
-    localStorage.setItem('turing_shown_questions', JSON.stringify([...shownQuestions.current]));
+    if (!question && topics.length > 0) {
+      const rt = topics[Math.floor(Math.random() * topics.length)];
+      const picked = pickFromPool(rt.problems, rt.name, '');
+      question = picked.question; tName = picked.tName; sName = picked.sName;
+      chosenTopicId = rt.id;
+    }
+
+    if (!question) {
+      question = 'Solve for x: $2x^2 - 5x + 2 = 0$';
+      tName = 'Default';
+    }
+
     setCurrentProblem(question);
     if (chosenTopicId && !selectedTopicId) setSelectedTopicId(chosenTopicId);
     if (chosenSubtopic && !selectedSubtopic) setSelectedSubtopic(chosenSubtopic);
     setFeedDetails({ topicName: tName, subtopicName: sName || undefined });
-
-    const normQ = question.trim().replace(/\s+/g, ' ');
-    const entry: HistoryEntry = {
-      id: `h_${Date.now()}`,
-      question,
-      topicName: tName,
-      subtopicName: sName || undefined,
-      courseId: effectiveCourse as 'adv'|'mx1'|'mx2',
-      yearLevel,
-      createdAt: new Date(),
-    };
-    setHistory(prev => {
-      const dupIdx = prev.findIndex(h => (h.question || '').trim().replace(/\s+/g, ' ') === normQ);
-      if (dupIdx >= 0) { const updated = [...prev]; updated.splice(dupIdx, 1); return [entry, ...updated]; }
-      return [entry, ...prev];
-    });
-    setQuestionStack(prev => {
-      const trimmed = stackPos >= 0 && stackPos < prev.length - 1 ? prev.slice(0, stackPos + 1) : prev;
-      return [...trimmed, question];
-    });
-    setStackPos(prev => prev + 1);
     setProblemLoading(false);
     setLauncherCollapsed(true);
     setFilterBodyOpen(false);
     setWorkspaceOpen(true);
     setHintText(null);
     setMarkingResult(null);
+    setQuestionIndex(prev => prev + 1);
+
+    const entry: HistoryEntry = {
+      id: `h_${Date.now()}`, question,
+      topicName: tName, subtopicName: sName || undefined,
+      courseId: effectiveCourse as 'adv'|'mx1'|'mx2', yearLevel, createdAt: new Date(),
+    };
+    setHistory(prev => {
+      const normQ = question.trim().replace(/\s+/g, ' ');
+      const dupIdx = prev.findIndex(h => (h.question || '').trim().replace(/\s+/g, ' ') === normQ);
+      if (dupIdx >= 0) { const u = [...prev]; u.splice(dupIdx, 1); return [entry, ...u]; }
+      return [entry, ...prev];
+    });
+    setQuestionStack(prev => [...prev, question]);
+    setStackPos(prev => prev + 1);
+
     const cvs = canvasRef.current;
     if (cvs) {
       const container = canvasContainerRef.current;
       const w = container?.clientWidth || 800;
       cvs.width = w; cvs.height = CANVAS_HEIGHT;
       const ctx = cvs.getContext('2d');
-      if (ctx) { ctx.clearRect(0, 0, w, CANVAS_HEIGHT); ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = isEraser ? 24 : 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over'; }
+      if (ctx) { ctx.clearRect(0, 0, w, CANVAS_HEIGHT); ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.globalCompositeOperation = 'source-over'; }
     }
-    setQuestionIndex(prev => prev + 1);
+
+    try {
+      const params: any = { course: effectiveCourse, limit: 1 };
+      if (chosenTopicId) params.topic_id = chosenTopicId;
+      const result = await getNextQuestion(params);
+      if (result.questions?.length > 0) {
+        setCurrentQuestionId(result.questions[0].question_id);
+      }
+    } catch {}
   };
 
   const goToPrevQuestion = () => {
