@@ -446,32 +446,42 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     let chosenSubtopic = directSubtopic !== undefined ? directSubtopic : selectedSubtopic;
     const effectiveCourse = directCourse ?? courseId;
 
-    const pickFromPool = (pool: string[], topicName: string, subtopicName: string) => {
+    try {
+      const params: any = { course: effectiveCourse, limit: 1 };
+      if (chosenTopicId) params.topic_id = chosenTopicId;
+      if (chosenSubtopic) params.subtopic = chosenSubtopic;
+
+      const result = await getNextQuestion(params);
+      if (result.questions && result.questions.length > 0) {
+        const q = result.questions[0];
+        question = q.question_text;
+        tName = q.topic_id;
+        sName = q.subtopic || '';
+        chosenTopicId = q.topic_id;
+        chosenSubtopic = q.subtopic || null;
+        setCurrentQuestionId(q.question_id);
+      }
+    } catch {}
+
+    if (!question) {
+      const topics = allTopics;
+      const topic = chosenTopicId ? topics.find(t => t.id === chosenTopicId) : null;
+      let pool: string[] = [];
+      if (topic) {
+        tName = topic.name;
+        const sub = chosenSubtopic;
+        if (sub && topic.problemsBySubtopic?.[sub]) { pool = topic.problemsBySubtopic[sub]; sName = sub; }
+        else pool = topic.problems;
+      }
+      if (pool.length === 0 && topics.length > 0) {
+        const rt = topics[Math.floor(Math.random() * topics.length)];
+        tName = rt.name; pool = rt.problems; chosenTopicId = rt.id;
+      }
       const fresh = pool.filter(q => !shownQuestions.current.has(q.trim().replace(/\s+/g, ' ')));
       const use = fresh.length > 0 ? fresh : pool;
-      const picked = use[Math.floor(Math.random() * use.length)];
-      shownQuestions.current.add(picked.trim().replace(/\s+/g, ' '));
-      localStorage.setItem('turing_shown_questions', JSON.stringify([...shownQuestions.current]));
-      return { question: autoFormatMath(picked), tName: topicName, sName: subtopicName };
-    };
-
-    const topics = allTopics;
-    const topic = chosenTopicId ? topics.find(t => t.id === chosenTopicId) : null;
-
-    if (topic) {
-      const sub = chosenSubtopic;
-      const pool = (sub && topic.problemsBySubtopic?.[sub]) ? topic.problemsBySubtopic[sub] : topic.problems;
-      if (pool.length > 0) {
-        const picked = pickFromPool(pool, topic.name, sub || '');
-        question = picked.question; tName = picked.tName; sName = picked.sName;
+      if (use.length > 0) {
+        question = autoFormatMath(use[Math.floor(Math.random() * use.length)]);
       }
-    }
-
-    if (!question && topics.length > 0) {
-      const rt = topics[Math.floor(Math.random() * topics.length)];
-      const picked = pickFromPool(rt.problems, rt.name, '');
-      question = picked.question; tName = picked.tName; sName = picked.sName;
-      chosenTopicId = rt.id;
     }
 
     if (!question) {
@@ -479,6 +489,8 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
       tName = 'Default';
     }
 
+    shownQuestions.current.add(question.trim().replace(/\s+/g, ' '));
+    localStorage.setItem('turing_shown_questions', JSON.stringify([...shownQuestions.current]));
     setCurrentProblem(question);
     if (chosenTopicId && !selectedTopicId) setSelectedTopicId(chosenTopicId);
     if (chosenSubtopic && !selectedSubtopic) setSelectedSubtopic(chosenSubtopic);
@@ -504,7 +516,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     });
     setQuestionStack(prev => [...prev, question]);
     setStackPos(prev => prev + 1);
-
     const cvs = canvasRef.current;
     if (cvs) {
       const container = canvasContainerRef.current;
@@ -513,15 +524,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
       const ctx = cvs.getContext('2d');
       if (ctx) { ctx.clearRect(0, 0, w, CANVAS_HEIGHT); ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.globalCompositeOperation = 'source-over'; }
     }
-
-    try {
-      const params: any = { course: effectiveCourse, limit: 1 };
-      if (chosenTopicId) params.topic_id = chosenTopicId;
-      const result = await getNextQuestion(params);
-      if (result.questions?.length > 0) {
-        setCurrentQuestionId(result.questions[0].question_id);
-      }
-    } catch {}
   };
 
   const goToPrevQuestion = () => {
