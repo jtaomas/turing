@@ -466,17 +466,18 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Generate problem — fetches from database question bank with dedup
-  const handleGenerate = async () => {
+  // Generate problem — accepts direct params to avoid stale state after handleTopicClick
+  const handleGenerate = async (directTopicId?: string, directSubtopic?: string | null, directCourse?: string) => {
     setProblemLoading(true);
     let tName = '', sName = '', question = '';
-    let chosenTopicId = selectedTopicId;
-    let chosenSubtopic = selectedSubtopic;
+    let chosenTopicId = directTopicId ?? selectedTopicId;
+    let chosenSubtopic = directSubtopic !== undefined ? directSubtopic : selectedSubtopic;
+    const effectiveCourse = directCourse ?? courseId;
 
+    // ── Try database first ──
     try {
-      // Try database first — filters out already-attempted questions
       const params: { topic_id?: string; subtopic?: string; course?: string; limit?: number } = {
-        course: courseId,
+        course: effectiveCourse,
         limit: 1,
       };
       if (chosenTopicId) params.topic_id = chosenTopicId;
@@ -490,13 +491,11 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         sName = q.subtopic || '';
         chosenTopicId = q.topic_id;
         chosenSubtopic = q.subtopic || null;
-        setCurrentQuestionId(q.question_id);  // track for dedup
+        setCurrentQuestionId(q.question_id);
       }
-    } catch {
-      // Fallback to hardcoded questions if backend is down
-    }
+    } catch { /* fallback below */ }
 
-    // Fallback: use FEATURED_LATEX or constants pool
+    // ── Fallback: FEATURED_LATEX or constants pool ──
     if (!question) {
       let pool: string[] = [];
       const topic = chosenTopicId ? (currentTopic || allTopics.find(t => t.id === chosenTopicId)) : null;
@@ -528,32 +527,24 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
 
     question = question || 'Solve for x: $2x^2 - 5x + 2 = 0$';
     setCurrentProblem(question);
-    // Update selectedTopicId if it came from the API
     if (chosenTopicId && !selectedTopicId) setSelectedTopicId(chosenTopicId);
     if (chosenSubtopic && !selectedSubtopic) setSelectedSubtopic(chosenSubtopic);
     setFeedDetails({ topicName: tName, subtopicName: sName || undefined });
 
-    // Normalize for dedup comparison and add to history
+    // Add to history
     const normQ = question.trim().replace(/\s+/g, ' ');
-    const entryId = `h_${Date.now()}`;
     const entry: HistoryEntry = {
-      id: entryId,
+      id: `h_${Date.now()}`,
       question,
       topicName: tName,
       subtopicName: sName || undefined,
-      courseId,
+      courseId: effectiveCourse as 'adv'|'mx1'|'mx2',
       yearLevel,
       createdAt: new Date(),
     };
     setHistory(prev => {
-      const dupIdx = prev.findIndex(h =>
-        (h.question || '').trim().replace(/\s+/g, ' ') === normQ
-      );
-      if (dupIdx >= 0) {
-        const updated = [...prev];
-        updated.splice(dupIdx, 1);
-        return [entry, ...updated];
-      }
+      const dupIdx = prev.findIndex(h => (h.question || '').trim().replace(/\s+/g, ' ') === normQ);
+      if (dupIdx >= 0) { const updated = [...prev]; updated.splice(dupIdx, 1); return [entry, ...updated]; }
       return [entry, ...prev];
     });
     setQuestionStack(prev => {
@@ -567,22 +558,13 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     setWorkspaceOpen(true);
     setHintText(null);
     setMarkingResult(null);
-    // Reset canvas
     const cvs = canvasRef.current;
     if (cvs) {
       const container = canvasContainerRef.current;
       const w = container?.clientWidth || 800;
-      cvs.width = w;
-      cvs.height = CANVAS_HEIGHT;
+      cvs.width = w; cvs.height = CANVAS_HEIGHT;
       const ctx = cvs.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, w, CANVAS_HEIGHT);
-        ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = isEraser ? 24 : 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
-      }
+      if (ctx) { ctx.clearRect(0, 0, w, CANVAS_HEIGHT); ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = isEraser ? 24 : 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over'; }
     }
     setQuestionIndex(prev => prev + 1);
   };
@@ -1098,7 +1080,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                               {courseId === 'mx2' ? 'Ext 1 + Ext 2' : courseId === 'mx1' ? 'Advanced + Ext 1' : 'Advanced'}
                             </p>
                             {allTopics.map(t => (
-                              <button key={t.id} onClick={() => { handleTopicClick(t.id); handleGenerate(); }}
+                              <button key={t.id} onClick={() => { handleTopicClick(t.id); handleGenerate(t.id, null, courseId); }}
                                 className={`w-full text-left px-4 py-2 text-[13px] border transition-colors no-round ${
                                   selectedTopicId===t.id
                                     ? 'bg-emerald-500/15 border-emerald-500/60 text-white'

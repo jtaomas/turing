@@ -162,14 +162,28 @@ interface Props {
 }
 
 const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
-  const [sets, setSets] = useState<QuestionSet[]>([]);
+  const [sets, setSets] = useState<QuestionSet[]>(() => {
+    try {
+      const saved = localStorage.getItem('turing_sets');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map((s: any) => ({ ...s, uploadedAt: new Date(s.uploadedAt) }));
+      }
+    } catch {}
+    return [];
+  });
   const [uploading, setUploading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [activeCourse, setActiveCourse] = useState<string>(''); // empty = nothing selected, show template gallery only
+  const [activeCourse, setActiveCourse] = useState<string>('');
   const [selectedHYTopic, setSelectedHYTopic] = useState<string | null>(null);
+
+  // Persist sets to localStorage
+  useEffect(() => {
+    localStorage.setItem('turing_sets', JSON.stringify(sets));
+  }, [sets]);
 
   // Neural yield data from backend
   const [yieldMap, setYieldMap] = useState<Record<string, number>>({});
