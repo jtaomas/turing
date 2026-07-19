@@ -446,6 +446,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     let chosenSubtopic = directSubtopic !== undefined ? directSubtopic : selectedSubtopic;
     const effectiveCourse = directCourse ?? courseId;
 
+    let apiError = '';
     try {
       const params: any = { course: effectiveCourse, limit: 1 };
       if (chosenTopicId) params.topic_id = chosenTopicId;
@@ -461,7 +462,9 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         chosenSubtopic = q.subtopic || null;
         setCurrentQuestionId(q.question_id);
       }
-    } catch {}
+    } catch (e: any) {
+      apiError = e?.message || String(e);
+    }
 
     if (!question) {
       const topics = allTopics;
@@ -487,6 +490,10 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     if (!question) {
       question = 'Solve for x: $2x^2 - 5x + 2 = 0$';
       tName = 'Default';
+    }
+
+    if (apiError) {
+      question = `[API: ${apiError}] ` + question;
     }
 
     shownQuestions.current.add(question.trim().replace(/\s+/g, ' '));
