@@ -446,7 +446,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     let chosenSubtopic = directSubtopic !== undefined ? directSubtopic : selectedSubtopic;
     const effectiveCourse = directCourse ?? courseId;
 
-    let apiError = '';
     try {
       const params: any = { course: effectiveCourse, limit: 1 };
       if (chosenTopicId) params.topic_id = chosenTopicId;
@@ -463,41 +462,13 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         setCurrentQuestionId(q.question_id);
       }
     } catch (e: any) {
-      apiError = e?.message || String(e);
+      question = `API ERROR: ${e?.message || String(e)}`;
     }
 
     if (!question) {
-      const topics = allTopics;
-      const topic = chosenTopicId ? topics.find(t => t.id === chosenTopicId) : null;
-      let pool: string[] = [];
-      if (topic) {
-        tName = topic.name;
-        const sub = chosenSubtopic;
-        if (sub && topic.problemsBySubtopic?.[sub]) { pool = topic.problemsBySubtopic[sub]; sName = sub; }
-        else pool = topic.problems;
-      }
-      if (pool.length === 0 && topics.length > 0) {
-        const rt = topics[Math.floor(Math.random() * topics.length)];
-        tName = rt.name; pool = rt.problems; chosenTopicId = rt.id;
-      }
-      const fresh = pool.filter(q => !shownQuestions.current.has(q.trim().replace(/\s+/g, ' ')));
-      const use = fresh.length > 0 ? fresh : pool;
-      if (use.length > 0) {
-        question = autoFormatMath(use[Math.floor(Math.random() * use.length)]);
-      }
+      question = 'No question returned from API. Check Flask terminal for errors.';
     }
 
-    if (!question) {
-      question = 'Solve for x: $2x^2 - 5x + 2 = 0$';
-      tName = 'Default';
-    }
-
-    if (apiError) {
-      question = `[API: ${apiError}] ` + question;
-    }
-
-    shownQuestions.current.add(question.trim().replace(/\s+/g, ' '));
-    localStorage.setItem('turing_shown_questions', JSON.stringify([...shownQuestions.current]));
     setCurrentProblem(question);
     if (chosenTopicId && !selectedTopicId) setSelectedTopicId(chosenTopicId);
     if (chosenSubtopic && !selectedSubtopic) setSelectedSubtopic(chosenSubtopic);
