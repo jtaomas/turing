@@ -1,0 +1,16 @@
+flask==3.1.1
+flask-cors==5.0.1
+flask-sqlalchemy==3.1.1
+flask-migrate==4.1.0
+google-genai>=2.3.0
+google-auth==2.38.0
+google-auth-oauthlib==1.2.1
+PyJWT==2.10.1
+Pillow==11.1.0
+pydantic>=2.0.0
+openai>=1.0.0
+requests==2.32.3
+python-dotenv==1.1.0
+gunicorn==23.0.0
+numpy==2.2.0
+torch>=2.0.0

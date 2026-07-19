@@ -1,0 +1,34 @@
+{
+  "name": "turing-math-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:backend": "cd backend && python app.py",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-oauth/google": "^0.12.1",
+    "jwt-decode": "^4.0.0",
+    "katex": "^0.16.21",
+    "lucide-react": "^1.11.0",
+    "motion": "^12.38.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^3.7.0"
+  },
+  "devDependencies": {
+    "@google/genai": "^2.12.0",
+    "@types/express": "^5.0.6",
+    "@types/katex": "^0.16.7",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.0",
+    "express": "^5.2.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

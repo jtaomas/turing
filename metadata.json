@@ -1,0 +1,10 @@
+{
+  "name": "Turing",
+  "description": "An advanced, monochrome AI-powered platform for NSW Mathematics Extension 1 and Extension 2 students, featuring worksheet solving and progress tracking.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
