@@ -57,14 +57,6 @@ cd backend
 python seed_question_bank.py
 ```
 
-### 4. Ingest PDF worksheets (optional)
-
-Drop PDFs into `backend/pdf_input/` then:
-
-```
-run_ingestion.bat
-```
-
 ---
 
 ## Verify
