@@ -98,6 +98,10 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     catch { return []; }
   });
 
+  const shownQuestions = useRef<Set<string>>(new Set(
+    JSON.parse(localStorage.getItem('turing_shown_questions') || '[]')
+  ));
+
   const activeCourse = SYLLABUS.find(c => c.id === courseId);
   const allTopics = getSyllabusTopicsForCourse(courseId);
   const currentTopic = allTopics.find(t => t.id === selectedTopicId);
@@ -480,15 +484,20 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
           chosenTopicId = rt.id;
         }
       }
+      const fresh = pool.filter(q => !shownQuestions.current.has(q.trim().replace(/\s+/g, ' ')));
+      const usePool = fresh.length > 0 ? fresh : pool;
       const matchingTopic = allTopics.find(t => t.name === tName);
       if (matchingTopic && FEATURED_LATEX[matchingTopic.id]) {
-        question = FEATURED_LATEX[matchingTopic.id][Math.floor(Math.random() * FEATURED_LATEX[matchingTopic.id].length)];
-      } else if (pool.length > 0) {
-        question = autoFormatMath(pool[Math.floor(Math.random() * pool.length)]);
+        const featFresh = FEATURED_LATEX[matchingTopic.id].filter(q => !shownQuestions.current.has(q.trim().replace(/\s+/g, ' ')));
+        question = (featFresh.length > 0 ? featFresh : FEATURED_LATEX[matchingTopic.id])[Math.floor(Math.random() * (featFresh.length > 0 ? featFresh.length : FEATURED_LATEX[matchingTopic.id].length))];
+      } else if (usePool.length > 0) {
+        question = autoFormatMath(usePool[Math.floor(Math.random() * usePool.length)]);
       }
     }
 
     question = question || 'Solve for x: $2x^2 - 5x + 2 = 0$';
+    shownQuestions.current.add(question.trim().replace(/\s+/g, ' '));
+    localStorage.setItem('turing_shown_questions', JSON.stringify([...shownQuestions.current]));
     setCurrentProblem(question);
     if (chosenTopicId && !selectedTopicId) setSelectedTopicId(chosenTopicId);
     if (chosenSubtopic && !selectedSubtopic) setSelectedSubtopic(chosenSubtopic);
