@@ -7,11 +7,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Body parser setup support for base64 handwriting images
   app.use(express.json({ limit: "20mb" }));
   app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
-  // API Route - Transcribe and Mark
   app.post("/api/transcribe-and-mark", async (req, res) => {
     try {
       const { problemDescription, imageBase64, textAnswer } = req.body;
@@ -97,7 +95,6 @@ async function startServer() {
     }
   });
 
-  // API Route - Generate Hint
   app.post("/api/generate-hint", async (req, res) => {
     try {
       const { problemDescription } = req.body;
@@ -129,7 +126,6 @@ async function startServer() {
     }
   });
 
-  // Serve Frontend with Vite in dev, static files in prod
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -145,7 +141,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http:
   });
 }
 

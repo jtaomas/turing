@@ -16,7 +16,6 @@ const FEATURED_LATEX: Record<string, string[]> = {
   'mex-c1': ["Evaluate $\\int x \\ln x \\; dx$ using integration by parts."]
 };
 
-// ─── Types ──────────────────────────────────────────────────────
 interface HistoryEntry {
   id: string;
   question: string;
@@ -27,11 +26,10 @@ interface HistoryEntry {
   createdAt: Date;
   score?: number;
   answer?: string;
-  imageData?: string;  // base64 canvas snapshot (only when user drew something)
-  attemptId?: number;  // backend ProblemAttempt ID
+  imageData?: string;  
+  attemptId?: number;  
 }
 
-// ─── Auto-typing ────────────────────────────────────────────────
 function TypewriterText({ text, delay }: { text: string; delay: number }) {
   const [displayed, setDisplayed] = useState('');
   useEffect(() => {
@@ -45,7 +43,6 @@ function TypewriterText({ text, delay }: { text: string; delay: number }) {
   return <span>{displayed}<span className="animate-pulse text-emerald-400">|</span></span>;
 }
 
-// ═══════════════════════════════════════════════════════════════
 interface HomeProps {
   sessionMode?: SessionMode | null;
   onClearSession?: () => void;
@@ -57,19 +54,16 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Question launcher state — progressive steps
   const [step, setStep] = useState<1|2|3>(1);
   const [yearLevel, setYearLevel] = useState<11|12>(() => {
     const saved = localStorage.getItem('turing_year_level');
     return saved === '11' ? 11 : 12;
   });
 
-  // Persist year level whenever it changes
   useEffect(() => {
     localStorage.setItem('turing_year_level', String(yearLevel));
   }, [yearLevel]);
   const [courseId, setCourseId] = useState<'adv'|'mx1'|'mx2'>(() => {
-    // Initialize from user profile if available, else default to 'adv'
     const saved = localStorage.getItem('turing_onboarding_course') || '';
     if (saved.includes('mx2') || saved.includes('Extension 2')) return 'mx2';
     if (saved.includes('mx1') || saved.includes('Extension 1')) return 'mx1';
@@ -85,41 +79,35 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
   const [launcherCollapsed, setLauncherCollapsed] = useState(false);
   const [filterBodyOpen, setFilterBodyOpen] = useState(true);
 
-  // Canvas workspace state
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [penColor, setPenColor] = useState('#e2e8f0');
   const [isEraser, setIsEraser] = useState(false);
-  const CANVAS_HEIGHT = 3600; // tall scrollable workspace — plenty of room
+  const CANVAS_HEIGHT = 3600; 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [markingResult, setMarkingResult] = useState<{score:number;total:number;overall:string;annotations:{step:string;status:string;detail:string}[];ai:boolean}|null>(null);
   const [markingLoading, setMarkingLoading] = useState(false);
   const [hintText, setHintText] = useState<string | null>(null);
   const [hintLoading, setHintLoading] = useState(false);
 
-  // Test mode timer
   const [testTimeLeft, setTestTimeLeft] = useState<number | null>(null);
   const testTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // History
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try { return JSON.parse(localStorage.getItem('turing_history') || '[]'); }
     catch { return []; }
   });
 
   const activeCourse = SYLLABUS.find(c => c.id === courseId);
-  // Use hierarchy: e.g. mx1 gets adv+mx1 topics, mx2 gets mx1+mx2 topics
   const allTopics = getSyllabusTopicsForCourse(courseId);
   const currentTopic = allTopics.find(t => t.id === selectedTopicId);
 
-  // Load user — sync course selection with profile
   useEffect(() => {
     (async () => {
       try {
         const tk = localStorage.getItem('turing_auth_token');
         if (tk) {
           const d = await getCurrentUser(); setUser(d.user);
-          // Sync courseId from user profile
           if (d.user?.course) {
             const uc = d.user.course.toLowerCase();
             if (uc.includes('extension 2') || uc.includes('mx2')) setCourseId('mx2');
@@ -132,13 +120,11 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     })();
   }, []);
 
-  // Save history to localStorage — keep all entries, dispatch event for Sidebar
   useEffect(() => {
     localStorage.setItem('turing_history', JSON.stringify(history));
     window.dispatchEvent(new CustomEvent('turing_history_changed'));
   }, [history]);
 
-  // Load question from history sidebar click
   useEffect(() => {
     if (historyQuestion) {
       setCurrentProblem(historyQuestion);
@@ -151,7 +137,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     }
   }, [historyQuestion]);
 
-  // When a history question with image is loaded, restore the canvas
   const restoreCanvasImage = (base64: string) => {
     const canvas = canvasRef.current;
     if (!canvas || !base64) return;
@@ -171,31 +156,25 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     img.src = `data:image/png;base64,${base64}`;
   };
 
-  // Restore canvas when loading a history question with image data
   useEffect(() => {
     if (!historyQuestion) return;
-    // Find the history entry that matches
     const entry = history.find(h => h.question === historyQuestion);
     if (entry?.imageData) {
-      // Small delay to let canvas mount
       setTimeout(() => restoreCanvasImage(entry.imageData!), 100);
     }
   }, [historyQuestion, history]);
 
-  // Greeting
   const h = new Date().getHours();
   const greeting = h < 5 || h >= 22 ? 'Good Evening' : h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening';
   const name = user?.display_name || 'Student';
 
-  // Practice elapsed timer
   const [practiceElapsed, setPracticeElapsed] = useState(0);
   const practiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [questionStack, setQuestionStack] = useState<string[]>([]);
   const [stackPos, setStackPos] = useState(-1);
-  const [sessionId, setSessionId] = useState<string>('');  // groups multi-question sessions
+  const [sessionId, setSessionId] = useState<string>('');  
 
-  // Generate a new session ID whenever a session starts or first question is generated
   const ensureSessionId = () => {
     if (!sessionId) {
       const newId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -205,7 +184,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     return sessionId;
   };
 
-  // Reset sessionId when session ends
   useEffect(() => {
     if (!sessionMode) {
       setSessionId('');
@@ -214,7 +192,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     }
   }, [sessionMode]);
 
-  // Initialize session mode — auto-generate first question
   useEffect(() => {
     if (sessionMode) {
       setLauncherCollapsed(false);
@@ -229,7 +206,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
           setPracticeElapsed(prev => prev + 1);
         }, 1000);
       }
-      // Auto-generate first question for the session
       setTimeout(() => handleGenerate(), 200);
     } else {
       setTestTimeLeft(null);
@@ -240,7 +216,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     return () => { if (practiceTimerRef.current) clearInterval(practiceTimerRef.current); };
   }, [sessionMode]);
 
-  // Test timer
   useEffect(() => {
     if (testTimeLeft !== null && testTimeLeft > 0) {
       testTimerRef.current = setInterval(() => {
@@ -256,7 +231,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     return () => { if (testTimerRef.current) clearInterval(testTimerRef.current); };
   }, [testTimeLeft !== null]);
 
-  // Initialize canvas dimensions when workspace opens
   useEffect(() => {
     if (!workspaceOpen) return;
     const container = canvasContainerRef.current;
@@ -276,7 +250,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     }
   }, [workspaceOpen]);
 
-  // Keep canvas styles in sync with pen/eraser state
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !workspaceOpen) return;
@@ -296,7 +269,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
-  // Smooth drawing using quadratic curves
   const lastSmoothRef = useRef<{x:number;y:number}|null>(null);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -326,7 +298,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     const last = lastSmoothRef.current;
     if (!last) { lastSmoothRef.current = { x: pos.x, y: pos.y }; return; }
 
-    // Quadratic curve for smooth free-flowing lines
     const midX = (last.x + pos.x) / 2;
     const midY = (last.y + pos.y) / 2;
     ctx.quadraticCurveTo(last.x, last.y, midX, midY);
@@ -363,7 +334,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
       const canvas = canvasRef.current;
       let imageBase64: string | undefined;
       if (canvas) {
-        imageBase64 = canvas.toDataURL('image/png').split(',')[1]; // Remove data: prefix
+        imageBase64 = canvas.toDataURL('image/png').split(',')[1]; 
       }
       const result = await transcribeAndMark(currentProblem, imageBase64, undefined);
       setMarkingResult({
@@ -374,7 +345,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         ai: (result as any).ai !== false,
       });
 
-      // Save attempt to backend with canvas image
       let attemptId: number | undefined;
       try {
         const saved = await saveAttempt({
@@ -392,7 +362,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         attemptId = saved.attempt.id;
       } catch { /* non-critical */ }
 
-      // Update the history entry with image data and attempt ID
       const normQ = currentProblem.trim().replace(/\s+/g, ' ');
       setHistory(prev => {
         const updated = [...prev];
@@ -410,14 +379,13 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         return updated;
       });
     } catch (err: any) {
-      // Show the actual error instead of random fake results
       setMarkingResult({
         score: 0,
         total: 5,
         overall: `Marking failed: ${err?.message || 'Backend unreachable'}. Check that Flask is running on port 5000.`,
         annotations: [
           { step: 'Connection', status: 'error', detail: 'Could not reach the marking backend. Make sure the Flask server is running (python app.py in the backend/ folder).' },
-          { step: 'API Key', status: 'error', detail: 'If using Gemini AI, verify GEMINI_API_KEY is set in backend/.env and is a valid key from https://aistudio.google.com/apikey' },
+          { step: 'API Key', status: 'error', detail: 'If using Gemini AI, verify GEMINI_API_KEY is set in backend/.env and is a valid key from https:
         ],
         ai: false,
       });
@@ -433,7 +401,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
       const result = await generateHint(currentProblem, 'ai', selectedTopicId || undefined);
       setHintText(result.hint);
     } catch {
-      // Fallback hints if backend is offline
       const fallbacks = [
         'Break the problem into smaller steps. Identify what is given and what you need to find.',
         'Look for patterns or known formulas that apply to this type of problem.',
@@ -446,7 +413,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     setHintLoading(false);
   };
 
-  // Resize canvas on workspace open
   useEffect(() => {
     if (!workspaceOpen) return;
     const timer = setTimeout(() => {
@@ -466,7 +432,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Generate problem — accepts direct params to avoid stale state after handleTopicClick
   const handleGenerate = async (directTopicId?: string, directSubtopic?: string | null, directCourse?: string) => {
     setProblemLoading(true);
     let tName = '', sName = '', question = '';
@@ -474,7 +439,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     let chosenSubtopic = directSubtopic !== undefined ? directSubtopic : selectedSubtopic;
     const effectiveCourse = directCourse ?? courseId;
 
-    // ── Try database first ──
     try {
       const params: { topic_id?: string; subtopic?: string; course?: string; limit?: number } = {
         course: effectiveCourse,
@@ -495,7 +459,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
       }
     } catch { /* fallback below */ }
 
-    // ── Fallback: FEATURED_LATEX or constants pool ──
     if (!question) {
       let pool: string[] = [];
       const topic = chosenTopicId ? (currentTopic || allTopics.find(t => t.id === chosenTopicId)) : null;
@@ -531,7 +494,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     if (chosenSubtopic && !selectedSubtopic) setSelectedSubtopic(chosenSubtopic);
     setFeedDetails({ topicName: tName, subtopicName: sName || undefined });
 
-    // Add to history
     const normQ = question.trim().replace(/\s+/g, ' ');
     const entry: HistoryEntry = {
       id: `h_${Date.now()}`,
@@ -606,7 +568,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     setStep(1);
   };
 
-  // Build breadcrumb segments with abbreviations for tight spaces
   const shortCourse: Record<string, string> = { adv: 'Adv', mx1: 'Ext 1', mx2: 'Ext 2' };
   const breadcrumbSegments: { full: string; short: string }[] = [];
   if (yearLevel) breadcrumbSegments.push({ full: `Year ${yearLevel}`, short: `Y${yearLevel}` });
@@ -616,14 +577,12 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
   }
   if (feedDetails?.topicName) {
     const topicClean = feedDetails.topicName.split('(')[0].trim();
-    // Abbreviate: take first word + truncate rest
     const words = topicClean.split(' ');
     const topicShort = words.length > 2 ? words.slice(0, 2).join(' ') + '…' : topicClean;
     breadcrumbSegments.push({ full: topicClean, short: topicShort });
   }
   if (feedDetails?.subtopicName) {
     const subClean = feedDetails.subtopicName.replace(/^[A-Z0-9.]+:\s*/, '');
-    // Abbreviate: first 2-3 words max
     const words = subClean.split(' ');
     const subShort = words.length > 3 ? words.slice(0, 3).join(' ') + '…' : subClean;
     breadcrumbSegments.push({ full: subClean, short: subShort });
@@ -633,7 +592,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 pb-28">
-      {/* ── Greeting ── */}
+
       {!sessionMode && (
         <div className="text-center space-y-3 pt-8">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
@@ -649,12 +608,12 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         </div>
       )}
 
-      {/* ── Session Dashboard (replaces greeting when session active) ── */}
+
       <AnimatePresence>
         {sessionMode && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
             className="pt-6 pb-2">
-            {/* Top bar: timer + name + end */}
+
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div>
@@ -665,7 +624,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                {/* Timer */}
+
                 <div className="flex items-center gap-2">
                   {sessionMode.type === 'test' ? (
                     <Timer size={14} className={testTimeLeft !== null && testTimeLeft < 300 ? 'text-red-400' : 'text-emerald-400'} />
@@ -680,7 +639,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                     {sessionMode.type === 'test' ? (testTimeLeft !== null ? formatTime(testTimeLeft) : '25:00') : formatTime(practiceElapsed)}
                   </span>
                 </div>
-                {/* End session */}
+
                 <button onClick={onClearSession}
                   className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-medium text-neutral-500 hover:text-red-400 border border-white/[0.06] hover:border-red-500/30 bg-transparent transition-colors">
                   <X size={11} /> End
@@ -688,7 +647,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
               </div>
             </div>
 
-            {/* Active filter chip */}
+
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-600">Filter</span>
               {yearLevel && (
@@ -720,7 +679,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         )}
       </AnimatePresence>
 
-      {/* ── Current question display ── */}
+
       <AnimatePresence>
         {currentProblem && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
@@ -739,7 +698,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
               <MathRenderer text={currentProblem} className="text-base text-neutral-100 leading-relaxed" />
             </div>
             <div className="px-5 py-2.5 border-t border-white/[0.05] flex items-center gap-1">
-              {/* Previous / Next question navigation — always visible */}
+
               <button onClick={goToPrevQuestion} disabled={stackPos <= 0}
                 title="Previous question"
                 className="px-3 py-2 text-neutral-500 hover:text-neutral-300 hover:bg-white/[0.03] border border-white/[0.05] bg-transparent transition-colors disabled:opacity-30">
@@ -774,13 +733,13 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
               </button>
             </div>
 
-            {/* ── Inline workspace ── */}
+
             <AnimatePresence>
               {workspaceOpen && (
                 <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}} transition={{duration:0.2}}
                   className="overflow-hidden">
                   <div className="border-t border-white/[0.06]">
-                    {/* Workspace toolbar */}
+
                     <div className="flex items-center gap-1 px-4 py-2 border-b border-white/[0.04] bg-white/[0.01]">
                       <button onClick={() => { setIsEraser(false); setPenColor('#e2e8f0'); }}
                         title="Pen"
@@ -812,7 +771,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                       </button>
                     </div>
 
-                    {/* Canvas drawing area — tall vertical-scroll workspace */}
+
                     <div ref={canvasContainerRef} className="relative overflow-y-auto overflow-x-hidden" style={{
                       maxHeight: '600px',
                       backgroundImage: 'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
@@ -831,7 +790,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                       />
                     </div>
 
-                    {/* Hint result */}
+
                     <AnimatePresence>
                       {hintText && (
                         <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}} className="overflow-hidden">
@@ -845,12 +804,12 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                       )}
                     </AnimatePresence>
 
-                    {/* Marking result — clean professional grade-sheet */}
+
                     <AnimatePresence>
                       {markingResult && (
                         <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}} className="overflow-hidden">
                           <div className="border-t border-white/[0.06]">
-                            {/* ── Score hero ── */}
+
                             <div className="px-5 py-5 flex items-center gap-4">
                               <div className={`w-14 h-14 flex items-center justify-center text-2xl font-bold ${
                                 markingResult.score >= markingResult.total * 0.8 ? 'bg-emerald-500 text-black' :
@@ -875,7 +834,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                               </div>
                             </div>
 
-                            {/* ── Overall feedback ── */}
+
                             <div className="border-t border-white/[0.05] px-5 py-4">
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Feedback</span>
@@ -883,7 +842,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                               <p className="text-[13px] text-neutral-200 leading-relaxed">{markingResult.overall}</p>
                             </div>
 
-                            {/* ── Step breakdown ── */}
+
                             {markingResult.annotations && markingResult.annotations.length > 0 && (
                               <div className="border-t border-white/[0.05]">
                                 <div className="px-5 py-2.5">
@@ -895,7 +854,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                                   {markingResult.annotations.map((a, i) => (
                                     <div key={i} className="px-5 py-3">
                                       <div className="flex items-start gap-3">
-                                        {/* Step number + status badge */}
+
                                         <div className={`shrink-0 w-5 h-5 flex items-center justify-center text-[10px] font-bold ${
                                           a.status === 'correct'
                                             ? 'bg-emerald-500/20 text-emerald-400'
@@ -936,11 +895,9 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
         )}
       </AnimatePresence>
 
-      {/* ── Workspace modal removed — now inline ── */}
 
-      {/* ═══════════════════════════════════════════════════════════
-          LAUNCHER — collapsed breadcrumb or full filter panel
-          ═══════════════════════════════════════════════════════ */}
+
+
       <AnimatePresence mode="wait">
         {launcherCollapsed ? (
           /* ── Collapsed breadcrumb bar ── */
@@ -988,7 +945,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
             className="fixed bottom-0 left-56 right-0 z-40 px-6 pb-3"
           >
             <div className="bg-[#0a0a0c] border border-white/[0.05] overflow-hidden max-w-4xl mx-auto">
-              {/* ── Header ── */}
+
               <div className="flex items-center justify-between px-5 py-2.5">
                 <div className="flex items-center gap-2">
                   <button onClick={() => setFilterBodyOpen(!filterBodyOpen)}
@@ -1018,12 +975,12 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                 </div>
               </div>
 
-              {/* ── Collapsible Body ── */}
+
               <AnimatePresence>
                 {filterBodyOpen && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }} className="overflow-hidden">
                     <div className="flex border-t border-white/[0.04]">
-                      {/* Left: filter categories */}
+
                       <div className="w-[140px] shrink-0 border-r border-white/[0.04] py-3">
                         {[
                           {id:1,label:'Year',active:step===1},
@@ -1041,7 +998,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                         ))}
                       </div>
 
-                      {/* Right: options */}
+
                       <div className="flex-1 p-4 min-h-[120px] max-h-[200px] overflow-y-auto">
                         {step===1&&(
                           <div className="space-y-1">
@@ -1094,7 +1051,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                       </div>
                     </div>
 
-                    {/* ── Footer ── */}
+
                     {step>=2&&(
                       <div className="border-t border-white/[0.04] px-5 py-3 flex items-center justify-between">
                         <span className="text-[10px] text-neutral-600">

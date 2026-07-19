@@ -93,7 +93,6 @@ const Problems: React.FC<ProblemsProps> = ({ selectedTopicId: externalTopicId, o
     const courseMap: Record<string, string> = { adv: 'adv', mx1: 'mx1', mx2: 'mx2' };
     let question = '', tName = '', sName = '';
 
-    // Determine what topic/subtopic to request
     let chosenTopicId: string | null = null;
     let chosenSubtopic: string | null = null;
     const allTopics = activeCourse?.sections.flatMap(s => s.topics) || [];
@@ -116,7 +115,6 @@ const Problems: React.FC<ProblemsProps> = ({ selectedTopicId: externalTopicId, o
       }
     }
 
-    // ── Try backend question bank first ──
     try {
       const params: any = { course: courseMap[courseId], limit: 1 };
       if (chosenTopicId) params.topic_id = chosenTopicId;
@@ -130,10 +128,8 @@ const Problems: React.FC<ProblemsProps> = ({ selectedTopicId: externalTopicId, o
         sName = q.subtopic || '';
       }
     } catch {
-      // Fallback to hardcoded constants if backend unreachable
     }
 
-    // ── Fallback: use local constants ──
     if (!question) {
       let pool: string[] = [];
       const t = chosenTopicId ? allTopics.find(tp => tp.id === chosenTopicId) : (topicOverride || currentTopic);

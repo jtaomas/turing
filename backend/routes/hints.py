@@ -20,7 +20,6 @@ DEEPSEEK_MODEL = 'deepseek-v4-pro'
 GEMINI_VISION_MODEL = 'gemini-2.0-flash'
 
 
-# ─── Pydantic schema for structured math marking ────────────────
 class StepEvaluation(BaseModel):
     step_number: int
     transcription_latex: str = Field(description="LaTeX transcription of this step")
@@ -37,7 +36,7 @@ class MarkingReport(BaseModel):
 
 
 def _call_deepseek(messages: list, temperature: float = 0.1, max_tokens: int = 2048) -> str | None:
-    """Call DeepSeek V4 via OpenAI-compatible SDK (text only)."""
+    
     api_key = current_app.config.get('DEEPSEEK_API_KEY', '')
     if not api_key:
         return None
@@ -61,11 +60,7 @@ def _call_deepseek(messages: list, temperature: float = 0.1, max_tokens: int = 2
 
 
 def _call_gemini_vision(image_b64: str, problem_text: str) -> dict | None:
-    """Call Gemini 3.5 Flash with an image for math marking.
     
-    Uses structured schema via Pydantic to enforce JSON output format.
-    Returns a dict with score, totalMarks, overall, annotations (frontend-compatible).
-    """
     api_key = current_app.config.get('GEMINI_API_KEY', '')
     if not api_key:
         return None
@@ -91,10 +86,8 @@ def _call_gemini_vision(image_b64: str, problem_text: str) -> dict | None:
             "7. For each annotation step, include the student's transcribed LaTeX and your assessment."
         )
 
-        # Decode base64 to raw bytes
         raw_bytes = base64.b64decode(image_b64)
 
-        # Use models.generate_content with multimodal content + structured output
         response = client.models.generate_content(
             model=GEMINI_VISION_MODEL,
             contents=[
@@ -113,11 +106,9 @@ def _call_gemini_vision(image_b64: str, problem_text: str) -> dict | None:
             )
         )
 
-        # Parse the structured response
         text = response.text
         report = json_lib.loads(text) if isinstance(text, str) else text
         
-        # Convert to frontend-compatible format
         total_marks = max(5, len(report.get('steps_breakdown', [])) * 2)
         final_score = max(1, min(total_marks, round((report.get('assigned_score', 50) / 100) * total_marks)))
 
@@ -142,8 +133,7 @@ def _call_gemini_vision(image_b64: str, problem_text: str) -> dict | None:
 
 
 def get_topic_guide(topic_id: str) -> dict | None:
-    """Get the topic guide for a given topic ID from the syllabus constants.
-    This is a server-side version of the frontend TOPIC_GUIDES map."""
+    
     guides = {
         'ma-f1': {'desc': 'Working with functions, absolute values, and domain/range restrictions.', 'level': 'Advanced'},
         'ma-t1': {'desc': 'Radian measures, sector areas, identities, and trigonometric functions.', 'level': 'Advanced'},
@@ -174,11 +164,10 @@ def get_topic_guide(topic_id: str) -> dict | None:
 
 
 def get_strategy_tip(problem_text: str) -> str:
-    """Generate a strategy hint based on keyword matching in the problem text."""
+    
     text_lower = problem_text.lower()
     tips = []
 
-    # Calculus keywords
     if any(word in text_lower for word in ['derivative', 'differentiate', 'integral', 'integrate',
                                             'tangent', 'rate of change', 'optimization', 'stationary',
                                             'curve', 'gradient', 'limit']):
@@ -215,21 +204,13 @@ def get_strategy_tip(problem_text: str) -> str:
 
 
 def build_fallback_marking_result(problem_description: str, text_answer: str | None = None, image_base64: str | None = None) -> dict:
-    """Deterministic marking fallback when AI is unavailable.
     
-    Parses the student's answer for mathematical structure:
-    - Identifies key steps (method, substitution, differentiation, algebra, final answer)
-    - Checks for common HSC errors (missing dx, sign errors, missing constants, domain issues, justification)
-    - Returns per-step annotations with LaTeX formatting
-    - Calculates a weighted score based on HSC band descriptors
-    """
     
     base_text = (text_answer or problem_description or '').strip()
     annotations = []
     total_possible = 0
     earned = 0.0
     
-    # ── Step 1: Method identification ──
     method_keywords = {
         r'differentiate|derivative|dy/dx|f\x27': 'Differentiation method',
         r'integrate|integral|\u222b|antiderivative': 'Integration method',
@@ -259,7 +240,6 @@ def build_fallback_marking_result(problem_description: str, text_answer: str | N
         total_possible += 1
         earned += 0.2
     
-    # ── Step 2: Working / substitutions ──
     has_substitution = bool(re.search(r'(let|substitute|u\s*=|t\s*=)', base_text, re.IGNORECASE))
     has_algebra = bool(re.search(r'[=]', base_text)) and len(base_text.split()) > 5
     has_numbers = bool(re.search(r'\d', base_text))
@@ -280,7 +260,6 @@ def build_fallback_marking_result(problem_description: str, text_answer: str | N
         total_possible += 1
         earned += 0.1
     
-    # ── Step 3: Calculus / trigonometry specifics ──
     has_calculus = bool(re.search(r'(d/d|differentiate|derivative|integrate|\u222b|lim)', base_text, re.IGNORECASE))
     has_trig = bool(re.search(r'(sin|cos|tan|theta|pi|\\pi)', base_text, re.IGNORECASE))
     has_log = bool(re.search(r'(ln|log|exp|e\^)', base_text, re.IGNORECASE))
@@ -327,7 +306,6 @@ def build_fallback_marking_result(problem_description: str, text_answer: str | N
         total_possible += 1
         earned += 0.7
     
-    # ── Step 4: Derivative / algebra check ──
     has_power_rule = bool(re.search(r'(x\^|\\cdot|power|chain)', base_text, re.IGNORECASE))
     has_product_rule = bool(re.search(r'(product|uv|f\s*g)', base_text, re.IGNORECASE))
     has_chain = bool(re.search(r'(chain|composite|u\s*=\s*x)', base_text, re.IGNORECASE))
@@ -338,7 +316,6 @@ def build_fallback_marking_result(problem_description: str, text_answer: str | N
         total_possible += 1
         earned += 0.8
     
-    # ── Step 5: Final answer ──
     has_final = bool(re.search(r'(therefore|hence|so|thus|answer|final|\\therefore|=>|\u21d2)', base_text, re.IGNORECASE))
     has_result = bool(re.search(r'(=\s*[-\d]|x\s*=\s*[-\d]|y\s*=\s*[-\d])', base_text)) or has_numbers
     
@@ -358,14 +335,12 @@ def build_fallback_marking_result(problem_description: str, text_answer: str | N
         total_possible += 2
         earned += 0.1
     
-    # ── Bonus: presentation quality ──
     if len(base_text.split()) > 15:
         annotations.append({'step': 'Presentation', 'status': 'correct',
                           'detail': 'Solution is well-structured with clear step-by-step reasoning.'})
         total_possible += 1
         earned += 0.8
     
-    # ── Compute final score ──
     total_possible = max(5, total_possible)
     scaled_total = max(5, total_possible * 2)
     scaled_score = round((earned / max(1, total_possible)) * scaled_total, 1)
@@ -395,28 +370,25 @@ def build_fallback_marking_result(problem_description: str, text_answer: str | N
 
 @hints_bp.route('/generate-hint', methods=['POST'])
 def generate_hint():
-    """Generate a hint for a given problem using the Gemini API."""
+    
     data = request.get_json()
     if not data or 'problemDescription' not in data:
         return jsonify({'error': 'Missing problemDescription'}), 400
 
     problem_text = data['problemDescription']
     topic_id = data.get('topicId', '')
-    hint_level = data.get('hintLevel', 'ai')  # 'concept', 'strategy', 'ai'
+    hint_level = data.get('hintLevel', 'ai')  
 
     if hint_level == 'concept':
-        # Hint 1: Core Concept from syllabus guide
         guide = get_topic_guide(topic_id) if topic_id else None
         if guide:
             return jsonify({'hint': guide['desc'], 'level': 'concept'}), 200
         return jsonify({'hint': 'This problem relates to a core topic in the NSW Mathematics syllabus. Review the relevant dot point.', 'level': 'concept'}), 200
 
     if hint_level == 'strategy':
-        # Hint 2: Strategy Tip via keyword matching
         tip = get_strategy_tip(problem_text)
         return jsonify({'hint': tip, 'level': 'strategy'}), 200
 
-    # Hint 3: AI-generated hint using Gemini 3.5 Flash
     hint_text = None
     gemini_key = current_app.config.get('GEMINI_API_KEY')
     if gemini_key:
@@ -441,7 +413,6 @@ def generate_hint():
     if not hint_text:
         hint_text = get_strategy_tip(problem_text)
 
-    # Log the hint
     user_id = None
     try:
         from flask import g
@@ -463,12 +434,7 @@ def generate_hint():
 
 @hints_bp.route('/transcribe-and-mark', methods=['POST'])
 def transcribe_and_mark():
-    """Mark student's working with per-step analysis using DeepSeek AI.
     
-    Two paths:
-      A) DeepSeek AI (with API key): analyses typed answers with step-by-step marking
-      B) Deterministic fallback (no API key or DeepSeek fails): rubric-based per-step marking
-    """
     from flask import g
 
     data = request.get_json()
@@ -485,7 +451,6 @@ def transcribe_and_mark():
     result = {}
     error_detail = None
 
-    # ── PATH A1: Gemini Vision (best for canvas drawings) ──
     if image_b64:
         gemini_result = _call_gemini_vision(image_b64, problem_text)
         if gemini_result:
@@ -494,7 +459,6 @@ def transcribe_and_mark():
         else:
             error_detail = 'Gemini vision marking failed — check GEMINI_API_KEY in backend/.env'
 
-    # ── PATH A2: DeepSeek V4 Pro (text only) ──
     if not used_ai and api_key and text_answer and text_answer.strip():
         try:
             system_msg = (
@@ -548,7 +512,6 @@ def transcribe_and_mark():
             error_detail = f'DeepSeek failed: {str(e)[:200]}'
             current_app.logger.warning(f'Marking AI error: {traceback.format_exc()}')
 
-    # ── PATH B: Fallback ──
     if not used_ai:
         if text_answer and text_answer.strip():
             result = build_fallback_marking_result(problem_text, text_answer)
@@ -581,7 +544,7 @@ def transcribe_and_mark():
 @hints_bp.route('/analyze-set', methods=['POST'])
 @token_required
 def analyze_uploaded_set():
-    """Use Gemini to assess an uploaded worksheet/set."""
+    
     from flask import g
 
     data = request.get_json()
@@ -595,7 +558,6 @@ def analyze_uploaded_set():
     if not api_key:
         return jsonify(_heuristic_set_analysis(filename, preview)), 200
 
-    # Import topic metadata for prompt
     from routes.recommendations import TOPIC_META, TOPIC_NAMES as TN
     topic_descriptions = '\n'.join([
         f"  {tid}: {TN.get(tid, tid)} (course={TOPIC_META[tid].get('course','adv')}, difficulty={TOPIC_META[tid].get('difficulty',3.0)})"
@@ -655,11 +617,10 @@ TOPIC_NAMES_FOR_ANALYSIS = {
 
 
 def _heuristic_set_analysis(filename: str, preview: str) -> dict:
-    """Simple heuristic when Gemini is unavailable."""
+    
     import re
     text = (filename + ' ' + preview).lower()
 
-    # Guess difficulty from keywords
     diff = 3.0
     if any(w in text for w in ['extension 2', 'mx2', 'complex', 'mechanics', 'proof', 'resisted']):
         diff = 4.5
@@ -668,14 +629,12 @@ def _heuristic_set_analysis(filename: str, preview: str) -> dict:
     elif any(w in text for w in ['advanced', 'calculus', 'trig']):
         diff = 3.0
 
-    # Guess topics
     topic_hints = []
     for tid, name in TOPIC_NAMES_FOR_ANALYSIS.items():
         key = name.lower().split()[0]
         if key in text or tid in text:
             topic_hints.append(tid)
 
-    # Guess question count
     q_count = 5
     num_match = re.search(r'(\d+)\s*(?:q|questions|problems)', text)
     if num_match:

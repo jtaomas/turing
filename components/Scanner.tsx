@@ -5,7 +5,6 @@ import { SYLLABUS, getEffectiveCourseIds } from '../constants';
 import { getTopicYields, getNeuralRecommendations, analyzeUploadedSet, TopicYield, TopicRecommendation, SetAnalysis } from '../services/api';
 import Spinner from './Spinner';
 
-// Local topic metadata for fallback yields (mirrors backend TOPIC_META)
 const TOPIC_META: Record<string, { exam_weight: number }> = {
   'ma-f1': { exam_weight: 8 }, 'ma-t1': { exam_weight: 7 }, 'ma-c1': { exam_weight: 6 },
   'ma-e1': { exam_weight: 5 }, 'ma-s1': { exam_weight: 6 }, 'ma-f2': { exam_weight: 7 },
@@ -17,7 +16,6 @@ const TOPIC_META: Record<string, { exam_weight: number }> = {
   'mex-n12': { exam_weight: 10 }, 'mex-c1': { exam_weight: 10 }, 'mex-m1': { exam_weight: 9 },
 };
 
-// ─── Types ──────────────────────────────────────────────────────
 export interface SessionMode {
   type: 'test' | 'practice';
   setName: string;
@@ -36,12 +34,10 @@ interface QuestionSet {
   completionScore: number;
 }
 
-// ─── Auto-naming ────────────────────────────────────────────────
 function autoName(fileName: string): string {
   const base = fileName.replace(/\.(pdf|png|jpg|jpeg)$/i, '').replace(/[-_]/g, ' ');
   const words = base.split(/\s+/).filter(w => w.length > 0);
   if (words.length === 0) return 'Untitled Set';
-  // Capitalize each word, remove common noise
   const clean = words
     .filter(w => !/^(img|scan|doc|file|photo|page|sheet|worksheet|unnamed|screenshot)$/i.test(w))
     .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -50,7 +46,6 @@ function autoName(fileName: string): string {
   return clean.join(' ');
 }
 
-// ─── Mock preview generator ─────────────────────────────────────
 function generatePreview(fileName: string): { topicCount: number; questionCount: number; preview: string; completionScore: number } {
   const seed = fileName.length * 31 + (fileName.charCodeAt(0) || 65);
   const topicCount = 1 + (seed % 4);
@@ -67,7 +62,6 @@ function generatePreview(fileName: string): { topicCount: number; questionCount:
   return { topicCount, questionCount, preview, completionScore };
 }
 
-// ─── Vape.gg-style collapsible category ──────────────────────────
 interface SyllabusCategoryProps {
   label: string;
   topics: Array<{
@@ -90,7 +84,7 @@ const SyllabusCategory: React.FC<SyllabusCategoryProps> = ({ label, topics, sele
 
   return (
     <div className="border-b border-white/[0.04]">
-      {/* Category header — vape.gg collapsible */}
+
       <button onClick={() => setOpen(!open)}
         className="w-full flex items-center gap-2.5 px-1 py-3 border-0 bg-transparent hover:bg-white/[0.01] transition-colors">
         <span className={`text-[10px] text-neutral-600 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}>▶</span>
@@ -134,7 +128,7 @@ const SyllabusCategory: React.FC<SyllabusCategoryProps> = ({ label, topics, sele
                     )}
                   </div>
                 </button>
-                {/* Actions shown when selected */}
+
                 {isSel && (
                   <div className="flex items-center gap-2 px-4 py-2 pl-12 bg-white/[0.01] border-t border-white/[0.03]">
                     <button onClick={() => onStartSession?.({ type: 'practice', setName: topic.name, setId: topic.id })}
@@ -156,7 +150,6 @@ const SyllabusCategory: React.FC<SyllabusCategoryProps> = ({ label, topics, sele
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
 interface Props {
   onStartSession?: (mode: SessionMode) => void;
 }
@@ -180,25 +173,20 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
   const [activeCourse, setActiveCourse] = useState<string>('');
   const [selectedHYTopic, setSelectedHYTopic] = useState<string | null>(null);
 
-  // Persist sets to localStorage
   useEffect(() => {
     localStorage.setItem('turing_sets', JSON.stringify(sets));
   }, [sets]);
 
-  // Neural yield data from backend
   const [yieldMap, setYieldMap] = useState<Record<string, number>>({});
   const [masteryMap, setMasteryMap] = useState<Record<string, number>>({});
   const [neuralRecs, setNeuralRecs] = useState<TopicRecommendation[]>([]);
   const [yieldsLoading, setYieldsLoading] = useState(false);
   const [yieldError, setYieldError] = useState(false);
 
-  // Read user's onboarding course — but keep '' as default (no section open)
   useEffect(() => {
     const c = localStorage.getItem('turing_onboarding_course') || '';
-    // Don't auto-set — user picks from template gallery
   }, []);
 
-  // Fetch neural yield scores from backend
   useEffect(() => {
     let cancelled = false;
     async function fetchYields() {
@@ -235,7 +223,6 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
     return () => { cancelled = true; };
   }, []);
 
-  // Build all syllabus topic sets dynamically with real neural yields
   const allSyllabusTopics = SYLLABUS.flatMap(course =>
     course.sections.flatMap(section =>
       section.topics.map(topic => ({
@@ -252,9 +239,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
   );
 
   const courseNames: Record<string, string> = { adv: 'Advanced', mx1: 'Extension 1', mx2: 'Extension 2' };
-  
-  // Hierarchy-aware topic filtering
-  // '' → nothing shown | all → all | adv → only Adv | mx1 → Adv+Ext1 | mx2 → Ext1+Ext2
+
   const HIERARCHY_COURSES: Record<string, string[]> = {
     adv: ['adv'],
     mx1: ['adv', 'mx1'],
@@ -264,9 +249,8 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
   };
   const visibleCourseIds = HIERARCHY_COURSES[activeCourse] || [];
   const filteredTopics = allSyllabusTopics.filter(t => visibleCourseIds.includes(t.courseId));
-  const showTopics = activeCourse !== ''; // only show topic sections when a course is selected
+  const showTopics = activeCourse !== ''; 
 
-  // Default "All Sets" collection
   const totalQuestions = allSyllabusTopics.reduce((s, t) => s + t.count, 0);
   const syllabusSets = [
     { id: 'syllabus_all', name: 'Complete Syllabus', course: 'All Courses', topics: allSyllabusTopics.length, questions: totalQuestions },
@@ -278,12 +262,10 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
   const handleFile = useCallback((file: File) => {
     if (!file.name.match(/\.(pdf|png|jpg|jpeg)$/i)) return;
     setUploading(true);
-    // Simulate processing then call Gemini for analysis
     setTimeout(async () => {
       const { topicCount, questionCount, preview, completionScore } = generatePreview(file.name);
       const name = autoName(file.name);
 
-      // Try Gemini assessment
       let analysis: SetAnalysis | null = null;
       try {
         analysis = await analyzeUploadedSet(file.name, preview);
@@ -327,7 +309,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
 
   return (
     <div className="min-h-screen bg-[#0a0a0c]">
-      {/* ══════ Header ══════ */}
+
       <div className="px-6 py-5">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-3 mb-4">
@@ -335,7 +317,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
             <h1 className="text-3xl font-light tracking-tight text-white">My Sets</h1>
             <div className="flex-1" />
           </div>
-          {/* Search bar */}
+
           <div className="relative max-w-xl">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-600" />
             <input
@@ -348,12 +330,12 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
         </div>
       </div>
 
-      {/* ══════ Template gallery — Start a new set ══════ */}
+
       <div className="px-6 py-6">
         <div className="max-w-5xl mx-auto">
           <h2 className="text-[10px] font-semibold text-neutral-500 uppercase tracking-[0.15em] mb-4">Start a new set</h2>
           <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
-            {/* New Set PLUS tile */}
+
             <button onClick={() => fileInputRef.current?.click()}
               className="text-left bg-[#0b0c10] border border-white/[0.06] hover:border-emerald-500/30 transition-all p-4 flex flex-col items-center justify-center min-h-[110px] group">
               <div className="w-10 h-10 bg-emerald-500/[0.08] flex items-center justify-center mb-2.5 group-hover:bg-emerald-500/[0.15] transition-colors">
@@ -361,7 +343,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
               </div>
               <p className="text-[11px] font-medium text-white text-center">New Set</p>
             </button>
-            {/* Highest Yield tile */}
+
             <button onClick={() => setActiveCourse('yield')}
               className={`text-left bg-[#0b0c10] border p-4 transition-all hover:border-emerald-500/30 min-h-[110px] flex flex-col ${
                 activeCourse === 'yield' ? 'border-emerald-500/40 bg-emerald-500/[0.02]' : 'border-white/[0.06]'
@@ -372,7 +354,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
               <p className="text-[11px] font-medium text-white">Highest Yield</p>
               <p className="text-[9px] text-neutral-500 mt-0.5">AI recommended</p>
             </button>
-            {/* Course tiles — order: Ext 2 → Ext 1 → Adv */}
+
             {['mx2', 'mx1', 'adv'].map(cId => {
               const cName = cId === 'mx2' ? 'Extension 2' : cId === 'mx1' ? 'Extension 1' : 'Advanced';
               const count = allSyllabusTopics.filter(t => t.courseId === cId).length;
@@ -389,7 +371,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
                 </button>
               );
             })}
-            {/* All Courses tile */}
+
             <button onClick={() => setActiveCourse('all')}
               className={`text-left bg-[#0b0c10] border p-4 transition-all hover:border-white/[0.15] min-h-[110px] flex flex-col ${
                 activeCourse === 'all' ? 'border-white/[0.12] bg-white/[0.01]' : 'border-white/[0.06]'
@@ -404,11 +386,11 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
         </div>
       </div>
 
-      {/* ══════ Topic sections — only shown when a course is selected ══════ */}
+
       {showTopics && (
         <div className="px-6 py-2">
           <div className="max-w-5xl mx-auto">
-            {/* Yield grid */}
+
             {activeCourse === 'yield' && (
               <div className="py-4">
                 {neuralRecs.length > 0 ? (
@@ -442,7 +424,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
               </div>
             )}
 
-            {/* Syllabus topic sections — grouped by course, with hierarchy */}
+
             {activeCourse !== 'yield' && (
               <div>
                 {visibleCourseIds.map(courseId => {
@@ -461,7 +443,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
         </div>
       )}
 
-      {/* ══════ Upload zone ══════ */}
+
       {sets.length === 0 && !uploading && (
         <div className="px-6 pb-6">
           <div className="max-w-5xl mx-auto">
@@ -478,7 +460,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
         </div>
       )}
 
-      {/* ══════ Uploading indicator ══════ */}
+
       <AnimatePresence>
         {uploading && (
           <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
@@ -489,7 +471,7 @@ const QuestionSets: React.FC<Props> = ({ onStartSession }) => {
         )}
       </AnimatePresence>
 
-      {/* ══════ User uploaded sets ══════ */}
+
       {filteredUser.length > 0 && (
         <div className="px-6 pb-8">
           <div className="max-w-5xl mx-auto">

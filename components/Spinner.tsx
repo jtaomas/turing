@@ -1,6 +1,6 @@
 import React from 'react';
 
-/** vape.gg-style clean loading spinner — a simple spinning ring, no dots */
+
 const Spinner: React.FC<{ size?: number; className?: string }> = ({ size = 16, className = '' }) => {
   return (
     <div

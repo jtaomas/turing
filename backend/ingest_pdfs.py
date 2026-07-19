@@ -7,18 +7,10 @@ difficulty estimation, and deduplication.
 
 Usage:
     cd backend
-    # Install deps first:
     pip install pdfplumber pypdf2
 
-    # Run:
     python ingest_pdfs.py --dir "C:/path/to/your/pdf/folder" --course adv
 
-    # Options:
-    #   --dir       Path to folder containing PDFs (required)
-    #   --course    Course filter: adv, mx1, mx2 (default: auto-detect)
-    #   --dry-run   Show what would be extracted without inserting
-    #   --limit N   Only process first N PDFs
-    #   --force     Skip dedup check (insert everything)
 
 How it works:
   1. Walks the folder, finds all .pdf files
@@ -46,7 +38,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app import create_app
 from models import db, Question
 
-# ─── PDF extraction ─────────────────────────────────────────────
 
 try:
     import pdfplumber
@@ -64,8 +55,7 @@ except ImportError:
 
 
 def extract_text_from_pdf(filepath: str) -> str:
-    """Extract text from a PDF file. Tries pdfplumber first, then PyPDF2."""
-    # Try pdfplumber (best for formatted text PDFs)
+    
     if HAS_PDFPLUMBER:
         try:
             with pdfplumber.open(filepath) as pdf:
@@ -79,7 +69,6 @@ def extract_text_from_pdf(filepath: str) -> str:
         except Exception as e:
             print(f"  pdfplumber failed: {e}")
 
-    # Fallback: PyPDF2
     if HAS_PYPDF2:
         try:
             reader = PdfReader(filepath)
@@ -96,15 +85,10 @@ def extract_text_from_pdf(filepath: str) -> str:
     return ""
 
 
-# ─── Gemini question parsing ────────────────────────────────────
 
 def parse_questions_with_gemini(text: str, course: str = 'adv',
                                  api_key: Optional[str] = None) -> list[dict]:
-    """Send extracted PDF text to Gemini to parse into individual questions.
-
-    Returns a list of dicts with keys:
-      question_text, topic_id, subtopic, difficulty, hsc_marks, course
-    """
+    
     if not api_key:
         print("  No Gemini API key — using heuristic parser")
         return _heuristic_parse(text, course)
@@ -117,7 +101,6 @@ def parse_questions_with_gemini(text: str, course: str = 'adv',
         for tid in sorted(TOPIC_META.keys())
     ])
 
-    # Truncate text if needed (Gemini context limit)
     text_preview = text[:12000] if len(text) > 12000 else text
 
     prompt = f"""You are an expert NSW HSC Mathematics question classifier.
@@ -178,21 +161,18 @@ Output ONLY valid JSON array."""
 
 
 def _heuristic_parse(text: str, course: str = 'adv') -> list[dict]:
-    """Fallback heuristic parser — splits on numbered markers and estimates."""
+    
     questions = []
 
-    # Split on common question markers
-    # Patterns: "1.", "Question 1", "Q1.", "\n1. ", "1)\n"
     parts = re.split(r'\n(?=(?:\d{1,2}[\.\)]\s)|(?:Question\s+\d+)|(?:Q\d+[\.\)]))', text)
 
     for part in parts:
         part = part.strip()
-        if len(part) < 20:  # Skip headers, page numbers, short fragments
+        if len(part) < 20:  
             continue
         if re.match(r'^(?:Page|SECTION|Chapter|Part)\s', part, re.IGNORECASE):
             continue
 
-        # Estimate topic from keywords
         topic_id = _guess_topic(part, course)
         difficulty = _guess_difficulty(part)
         marks = _guess_marks(part)
@@ -210,10 +190,9 @@ def _heuristic_parse(text: str, course: str = 'adv') -> list[dict]:
 
 
 def _guess_topic(text: str, default_course: str) -> str:
-    """Guess topic ID from text using 2024 NESA syllabus keywords."""
+    
     t = text.lower()
     keyword_map = {
-        # Advanced Year 11
         'ma-f1': ['function', 'domain', 'range', 'absolute value', 'simultaneous',
                    'piecewise', 'inverse variation', 'direct variation', 'semicircle',
                    'circle equation', 'vertical line test', 'composite function'],
@@ -226,7 +205,6 @@ def _guess_topic(text: str, default_course: str) -> str:
                    'change of base', 'natural log'],
         'ma-s1': ['probability', 'venn', 'random variable', 'set notation', 'conditional probability',
                    'independent event', 'tree diagram', 'sample space', 'mutually exclusive'],
-        # Advanced Year 12
         'ma-f2': ['transformation', 'dilation', 'translation', 'reflection', 'periodic',
                    'logarithmic scale', 'decibel', 'richter'],
         'ma-t2': ['secant', 'cosecant', 'cotangent', 'pythagorean identity', 'trigonometric equation',
@@ -239,7 +217,6 @@ def _guess_topic(text: str, default_course: str) -> str:
         'ma-s23': ['normal distribution', 'z-score', 'discrete probability', 'continuous random',
                     'expected value', 'variance', 'standard deviation', 'empirical rule', 'bell curve',
                     'probability density', 'CDF', 'PDF'],
-        # Extension 1 Year 11
         'me-f1': ['inverse function', 'polynomial', 'remainder theorem', 'factor theorem',
                    'sum of zeroes', 'product of zeroes', 'graphical relationship', 'parametric',
                    'cubic inequality', 'rational inequality', 'leading coefficient'],
@@ -247,7 +224,6 @@ def _guess_topic(text: str, default_course: str) -> str:
                     'R sin', 'R cos', 'three dimension', '3D trig', 't-formula'],
         'me-c1': ['permutation', 'combination', "nPr", "nCr", 'pascal', 'binomial theorem',
                    'binomial coefficient', 'binomial expansion'],
-        # Extension 1 Year 12
         'me-a1': ['induction', 'prove', 'divisibility'],
         'me-p1': ['vector', 'dot product', 'projectile', 'scalar product', 'projection',
                    'motion in vector', 'bearing', 'crosswind', 'relative velocity'],
@@ -259,7 +235,6 @@ def _guess_topic(text: str, default_course: str) -> str:
                     'logistic', "newton's law of cooling", 'carrying capacity'],
         'me-s1': ['bernoulli', 'binomial distribution', 'B(n,p)', 'sampling distribution',
                    'central limit theorem', 'sample mean'],
-        # Extension 2
         'mex-p12': ['proof by contradiction', 'AM-GM', 'triangle inequality', 'squeeze theorem',
                      'contrapositive', 'iff', 'equivalence', 'negation'],
         'mex-v1': ['vector equation', 'direction vector', 'skew line', 'cauchy-schwarz',
@@ -279,35 +254,30 @@ def _guess_topic(text: str, default_course: str) -> str:
 
 
 def _guess_difficulty(text: str) -> float:
-    """Estimate difficulty from 2024 NESA syllabus indicators."""
+    
     t = text.lower()
-    # Band 6 (Extension 2 level): proofs, derivations, complex multi-step
     if any(w in t for w in ['prove that', 'hence or otherwise', 'derive an expression',
                               'cauchy-schwarz', 'de moivre', 'contrapositive',
                               'recurrence relation', 'squeeze theorem']):
         return 4.5
-    # Band 5 (Extension 1 level): compound angles, induction, vector proofs
     if any(w in t for w in ['prove', 'proof', 'induction', 'compound angle',
                               'double angle', 'auxiliary', 'projectile',
                               'binomial theorem', 'sampling distribution']):
         return 4.0
-    # Band 4 (Advanced Year 12): calculus applications, integration
     if any(w in t for w in ['sketch', 'evaluate', 'hence', 'show that',
                               'optimisation', 'trapezoidal', 'inflection',
                               'second derivative', 'volume of revolution']):
         return 3.5
-    # Band 3 (Advanced Year 11): standard calculations
     if any(w in t for w in ['solve', 'calculate', 'determine', 'differentiate',
                               'integrate', 'simplify', 'find the equation']):
         return 2.5
-    # Band 2: basic recall
     if any(w in t for w in ['state', 'write', 'what is', 'convert', 'graph']):
         return 2.0
     return 3.0
 
 
 def _guess_marks(text: str) -> int:
-    """Estimate HSC marks from question complexity."""
+    
     t = text.lower()
     if any(w in t for w in ['prove that', 'hence or otherwise', 'derive an expression']):
         return 4
@@ -318,17 +288,15 @@ def _guess_marks(text: str) -> int:
     return 2
 
 
-# ─── Main ingestion loop ────────────────────────────────────────
 
 def ingest_folder(folder_path: str, course: str = 'auto', dry_run: bool = False,
                   limit: Optional[int] = None, force: bool = False):
-    """Process all PDFs in a folder and insert questions into the database."""
+    
     app = create_app()
 
     with app.app_context():
         api_key = app.config.get('GEMINI_API_KEY', '')
 
-        # Collect all PDFs
         pdf_files = []
         for root, dirs, files in os.walk(folder_path):
             for f in files:
@@ -344,7 +312,6 @@ def ingest_folder(folder_path: str, course: str = 'auto', dry_run: bool = False,
         print(f"Mode: {'DRY RUN (no insert)' if dry_run else 'LIVE INSERT'}")
         print(f"{'='*60}\n")
 
-        # Get existing question texts for dedup
         if not force:
             existing_texts = set()
             for q in Question.query.with_entities(Question.question_text).all():
@@ -366,7 +333,6 @@ def ingest_folder(folder_path: str, course: str = 'auto', dry_run: bool = False,
             filename = os.path.basename(filepath)
             print(f"\n[{i+1}/{len(pdf_files)}] {filename}")
 
-            # Extract text
             print(f"  Extracting text...")
             text = extract_text_from_pdf(filepath)
 
@@ -377,18 +343,15 @@ def ingest_folder(folder_path: str, course: str = 'auto', dry_run: bool = False,
 
             print(f"  Extracted {len(text):,} chars from {text.count(chr(10))+1} lines")
 
-            # Auto-detect course if needed
             detected_course = course
             if course == 'auto':
                 detected_course = _detect_course(filename, text)
                 print(f"  Auto-detected course: {detected_course}")
 
-            # Parse questions
             print(f"  Parsing questions...")
             questions = parse_questions_with_gemini(text, detected_course, api_key)
             print(f"  Found {len(questions)} questions")
 
-            # Insert
             for q in questions:
                 qt = q.get('question_text', '').strip()
                 if len(qt) < 10:
@@ -418,11 +381,9 @@ def ingest_folder(folder_path: str, course: str = 'auto', dry_run: bool = False,
                 db.session.commit()
                 print(f"  Committed {total_new} questions so far...")
 
-            # Small delay to avoid rate limiting
             if api_key:
                 time.sleep(0.5)
 
-        # Final commit
         if not dry_run:
             db.session.commit()
 
@@ -436,7 +397,7 @@ def ingest_folder(folder_path: str, course: str = 'auto', dry_run: bool = False,
 
 
 def _detect_course(filename: str, text: str) -> str:
-    """Auto-detect which course a PDF belongs to."""
+    
     combined = (filename + ' ' + text[:500]).lower()
     if any(w in combined for w in ['extension 2', 'mx2', '4u', '4 unit']):
         return 'mx2'
@@ -445,7 +406,6 @@ def _detect_course(filename: str, text: str) -> str:
     return 'adv'
 
 
-# ═══════════════════════════════════════════════════════════════
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ingest HSC math PDFs into Turing question bank')

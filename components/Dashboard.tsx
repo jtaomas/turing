@@ -100,7 +100,6 @@ function ProjectionGraph({ raw, hsc, atar, percentile }: { raw:number; hsc:numbe
   );
 }
 
-// ─── Analytics ──────────────────────────────────────────────────
 function compute(attempts:ProblemAttempt[]){
   const t=attempts.length,a=t>0?attempts.reduce((s,x)=>s+(x.score||0),0)/t:0;
   const time=attempts.reduce((s,x)=>s+x.time_spent_seconds,0);
@@ -119,11 +118,9 @@ function compute(attempts:ProblemAttempt[]){
   const peerPercentile=Math.max(5,Math.min(95,Math.round(100 - ((hscProjection + atarContribution)/2) * 0.8 + (t>15?6:0))));
   const uniqueTopics=new Set(attempts.filter(x=>x.topic_id).map(x=>x.topic_id)).size;
 
-  // Score history for sparkline
   const scoreHistory=sorted.filter(x=>x.score!=null).map(x=>x.score!);
   if(scoreHistory.length===0){scoreHistory.push(3,4,2,5,3);}
 
-  // Topic data for bars
   const topicNames=['Functions','Trig','Calculus','Exponentials','Statistics','Finance','Induction','Vectors','Complex','Mechanics'];
   const topicData=topicNames.map((label,i)=>({
     label,
@@ -136,12 +133,8 @@ function compute(attempts:ProblemAttempt[]){
     scoreHistory, topics:topicData};
 }
 
-// ─── Activity grid data ────────────────────────────────────────
 const ACT=Array.from({length:84},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(83-i));return{date:d.toISOString().split('T')[0],count:d>new Date()?-1:Math.random()<0.35?0:Math.floor(Math.random()*6)+1};});
 
-// ═══════════════════════════════════════════════════════════════
-// ANIMATED PULSE GRAPH — multi-layer canvas visualization
-// ═══════════════════════════════════════════════════════════════
 
 interface PulseData {
   readiness:number; coverage:number; avg:number; velocity:number;
@@ -157,14 +150,12 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const [dim,setDim] = useState({w:900,h:460});
-  // Animated values that smoothly chase targets
   const animRef = useRef({
     readiness:0, coverage:0, avg:0, velocity:0, total:0, streak:0, time:0,
     ringProgress:0, sparklineProgress:0, barProgress:[0,0,0,0,0,0],
     particles: [] as Array<{x:number;y:number;vx:number;vy:number;life:number;maxLife:number;r:number;color:string}>,
   });
 
-  // Resize
   useEffect(()=>{
     const r=()=>{if(boxRef.current){const b=boxRef.current.getBoundingClientRect();setDim({w:b.width,h:Math.max(440, Math.min(520,b.width*0.52))});}};
     r();window.addEventListener('resize',r);return()=>window.removeEventListener('resize',r);
@@ -173,7 +164,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
   useEffect(()=>{
     const cv=canvasRef.current;if(!cv)return;const ctx=cv.getContext('2d');if(!ctx)return;
     const a=animRef.current;
-    // Init particles
     if(a.particles.length===0){
       for(let i=0;i<40;i++){
         a.particles.push({
@@ -194,7 +184,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
       const elapsed = (t-enterTime)/1000;
       frame++;
 
-      // ── Smooth chase toward targets ──
       const lerpSpeed=0.06;
       a.readiness=lerp(a.readiness,data.readiness,lerpSpeed);
       a.coverage=lerp(a.coverage,data.coverage,lerpSpeed);
@@ -207,8 +196,7 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
       a.sparklineProgress=Math.min(1,a.sparklineProgress+0.008);
       for(let i=0;i<data.topics.length;i++)a.barProgress[i]=Math.min(1,a.barProgress[i]+0.025);
 
-      // ── Particles ──
-      const cx=w*0.27, cy=h*0.45; // center of ring gauge
+      const cx=w*0.27, cy=h*0.45; 
       for(const p of a.particles){
         p.x+=p.vx; p.y+=p.vy; p.life+=0.006;
         if(p.life>p.maxLife||p.x<-10||p.x>w+10||p.y<-10||p.y>h+10){
@@ -221,11 +209,9 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
         ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
       }
 
-      // ═══════ SECTION 1: RADIAL READINESS GAUGE ═══════
       const gaugeR = Math.min(110, w*0.13);
       const gaugeX = cx, gaugeY = cy;
 
-      // Outer glow aura
       for(let i=3;i>=0;i--){
         const auraR = gaugeR+15+i*25;
         const grad = ctx.createRadialGradient(gaugeX,gaugeY,gaugeR*0.6,gaugeX,gaugeY,auraR);
@@ -236,7 +222,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
         ctx.fillStyle=grad;ctx.beginPath();ctx.arc(gaugeX,gaugeY,auraR,0,Math.PI*2);ctx.fill();
       }
 
-      // Three concentric rings
       const rings=[
         {pct:a.coverage/100,color:'#38bdf8',label:'Coverage',thick:8,offset:0},
         {pct:a.readiness/100,color:'#a78bfa',label:'Readiness',thick:6,offset:12},
@@ -246,20 +231,16 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
       rings.forEach((ring,i)=>{
         const r=gaugeR-ring.offset;
         const prog=ring.pct*a.ringProgress;
-        // Track background
         ctx.beginPath();ctx.arc(gaugeX,gaugeY,r,-Math.PI/2,Math.PI*1.5);
         ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=ring.thick;ctx.stroke();
-        // Animated arc
         if(prog>0.001){
           const glow=ctx.createLinearGradient(gaugeX-r,gaugeY-r,gaugeX+r,gaugeY+r);
           glow.addColorStop(0,ring.color+'80');glow.addColorStop(1,ring.color);
           ctx.beginPath();ctx.arc(gaugeX,gaugeY,r,-Math.PI/2,-Math.PI/2+Math.PI*2*prog);
           ctx.strokeStyle=ring.color;ctx.lineWidth=ring.thick;ctx.stroke();
-          // Glow trace
           ctx.beginPath();ctx.arc(gaugeX,gaugeY,r,-Math.PI/2,-Math.PI/2+Math.PI*2*prog);
           ctx.strokeStyle=ring.color+'30';ctx.lineWidth=ring.thick*2.5;ctx.stroke();
         }
-        // Cap at end of arc
         if(prog>0.01){
           const angle=-Math.PI/2+Math.PI*2*prog;
           const capX=gaugeX+Math.cos(angle)*r, capY=gaugeY+Math.sin(angle)*r;
@@ -268,7 +249,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
         }
       });
 
-      // Center number
       const centerPulse=1+Math.sin(elapsed*2.5)*0.04;
       ctx.fillStyle='#ffffff';ctx.font=`bold ${Math.round(42*centerPulse)}px Inter,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillText(Math.round(a.readiness).toString(),gaugeX,gaugeY-6);
@@ -276,7 +256,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
       ctx.fillText('READINESS',gaugeX,gaugeY+22);
       ctx.fillText('%',gaugeX+24,gaugeY-10);
 
-      // ── Stat callouts around the gauge ──
       const callouts=[
         {label:'STREAK',val:a.streak.toFixed(0),suffix:'days',color:'#f472b6',angle:-0.5,dist:165},
         {label:'TOTAL',val:a.total.toFixed(0),suffix:'done',color:'#38bdf8',angle:1.0,dist:165},
@@ -285,31 +264,25 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
       ];
       callouts.forEach(c=>{
         const px=gaugeX+Math.cos(c.angle)*c.dist, py=gaugeY+Math.sin(c.angle)*c.dist;
-        // Line from gauge
         ctx.beginPath();ctx.moveTo(gaugeX+Math.cos(c.angle)*(gaugeR+30),gaugeY+Math.sin(c.angle)*(gaugeR+30));
         ctx.lineTo(px,py);ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;ctx.stroke();
-        // Dot
         ctx.fillStyle=c.color;ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();
-        // Label
         ctx.fillStyle='#71717a';ctx.font='8px Inter,sans-serif';ctx.textAlign='center';
         ctx.fillText(c.label,px,py-13);
         ctx.fillStyle='#ffffff';ctx.font='bold 13px Inter,sans-serif';
         ctx.fillText(c.val+c.suffix,px,py+15);
       });
 
-      // ═══════ SECTION 2: SCORE SPARKLINE ═══════
       const sparkX = w*0.55, sparkY = h*0.2, sparkW = w*0.42, sparkH = h*0.58;
       const hist = data.scoreHistory.length>0?data.scoreHistory:[3,4,2,5,3,4,5];
       const maxScore=5;
 
-      // Sparkline area
       ctx.fillStyle='rgba(255,255,255,0.01)';ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=1;
       ctx.beginPath();ctx.roundRect(sparkX-10,sparkY-10,sparkW+20,sparkH+20,12);ctx.fill();ctx.stroke();
 
       ctx.fillStyle='#71717a';ctx.font='9px Inter,sans-serif';ctx.textAlign='left';
       ctx.fillText('SCORE HISTORY',sparkX,sparkY-18);
 
-      // Grid lines
       for(let i=0;i<=maxScore;i++){
         const gy=sparkY+sparkH-(i/maxScore)*sparkH;
         ctx.strokeStyle='rgba(255,255,255,0.03)';ctx.lineWidth=0.5;
@@ -317,7 +290,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
         ctx.fillStyle='#52525b';ctx.font='8px Inter,sans-serif';ctx.fillText(i.toString(),sparkX-14,gy+3);
       }
 
-      // Animated path
       const step=sparkW/Math.max(1,hist.length-1);
       let pathDrawn=false;
       ctx.beginPath();
@@ -329,11 +301,8 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
         pathDrawn=true;
       }
       if(pathDrawn){
-        // Glow under-path
         ctx.strokeStyle='rgba(56,189,248,0.15)';ctx.lineWidth=6;ctx.stroke();
-        // Main path
         ctx.strokeStyle='#38bdf8';ctx.lineWidth=2;ctx.stroke();
-        // Gradient fill beneath
         const lastPx = sparkX+(drawnPoints-1)*step*(hist.length-1)/Math.max(1,drawnPoints-1);
         ctx.lineTo(lastPx,sparkY+sparkH);ctx.lineTo(sparkX,sparkY+sparkH);ctx.closePath();
         const fillGrad=ctx.createLinearGradient(0,sparkY,0,sparkY+sparkH);
@@ -341,7 +310,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
         ctx.fillStyle=fillGrad;ctx.fill();
       }
 
-      // Current value dot
       if(a.sparklineProgress>0.5){
         const lastIdx=hist.length-1;
         const dotX=sparkX+lastIdx*step, dotY=sparkY+sparkH-(hist[lastIdx]/maxScore)*sparkH;
@@ -351,7 +319,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
         ctx.fillText(hist[lastIdx].toFixed(1)+'/'+maxScore,dotX+8,dotY+3);
       }
 
-      // ═══════ SECTION 3: TOPIC BARS ═══════
       const barX=sparkX, barY=sparkY+sparkH+30;
       const barH=12, barGap=10, barMaxW=sparkW-50;
       ctx.fillStyle='#71717a';ctx.font='9px Inter,sans-serif';ctx.textAlign='left';
@@ -360,25 +327,19 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
       data.topics.forEach((topic,i)=>{
         const y=barY+i*(barH+barGap);
         const w=barMaxW*topic.pct/100*a.barProgress[i];
-        // Background
         ctx.fillStyle='rgba(255,255,255,0.03)';ctx.beginPath();ctx.roundRect(barX,y,barMaxW,barH,barH/2);ctx.fill();
-        // Animated bar
         if(w>1){
           const barGrad=ctx.createLinearGradient(barX,0,barX+barMaxW,0);
           barGrad.addColorStop(0,topic.color);barGrad.addColorStop(1,topic.color+'60');
           ctx.fillStyle=barGrad;ctx.beginPath();ctx.roundRect(barX,y,w,barH,barH/2);ctx.fill();
-          // Glow
           ctx.fillStyle=topic.color+'15';ctx.beginPath();ctx.roundRect(barX,y,w,barH,barH/2);ctx.fill();
         }
-        // Label
         ctx.fillStyle='#a1a1aa';ctx.font='9px Inter,sans-serif';ctx.textAlign='right';
         ctx.fillText(topic.label,barX-8,y+barH-3);
-        // Pct
         ctx.fillStyle='#e4e4e7';ctx.font='bold 9px Inter,sans-serif';ctx.textAlign='left';
         ctx.fillText(Math.round(topic.pct*a.barProgress[i])+'%',barX+w+6,y+barH-3);
       });
 
-      // ═══════ PULSING RING INDICATOR ═══════
       const pulseR=8+Math.sin(elapsed*3)*3;
       ctx.strokeStyle='rgba(56,189,248,0.3)';ctx.lineWidth=1.5;
       ctx.beginPath();ctx.arc(gaugeX,gaugeY,gaugeR+40,pulseR*0.1,Math.PI*2);ctx.stroke();
@@ -399,7 +360,6 @@ const AnimatedPulseGraph:React.FC<{data:PulseData}> = ({data}) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
 const Dashboard:React.FC=()=>{
   const [user,setUser]=useState<User|null>(null);
   const [attempts,setAttempts]=useState<ProblemAttempt[]>([]);
@@ -419,7 +379,7 @@ const Dashboard:React.FC=()=>{
 
   return(
     <div className="max-w-5xl mx-auto px-6 py-10 space-y-12 pb-20">
-      {/* ── Hero ── */}
+
       <div className="text-center space-y-3">
         <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}} transition={{duration:0.6}}>
           <h1 className="text-3xl md:text-4xl font-bold text-white">{greetingPrefix}, {name}</h1>
@@ -448,7 +408,7 @@ const Dashboard:React.FC=()=>{
         </div>
       </div>
 
-      {/* ── Animated Pulse Graph ── */}
+
       <AnimatedPulseGraph data={{
         readiness:n.readiness, coverage:n.coverage, avg:n.avg, velocity:n.velocity,
         total:n.total, streak:n.streak, time:n.time, uniqueTopics:n.uniqueTopics,
@@ -456,7 +416,7 @@ const Dashboard:React.FC=()=>{
         scoreHistory:n.scoreHistory, topics:n.topics,
       }} />
 
-      {/* ── Secondary quick stats ── */}
+
       <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{delay:1.2,duration:0.6}}
         className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -476,7 +436,7 @@ const Dashboard:React.FC=()=>{
         ))}
       </motion.div>
 
-      {/* ── Enhanced focus areas with urgency ── */}
+
       <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{delay:2,duration:0.5}}
         className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {[

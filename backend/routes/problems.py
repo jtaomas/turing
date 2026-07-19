@@ -6,14 +6,13 @@ import math
 
 problems_bp = Blueprint('problems', __name__, url_prefix='/api/problems')
 
-# Lazy import TOPIC_META to avoid circular deps
 def _get_topic_meta():
     from routes.recommendations import TOPIC_META
     return TOPIC_META
 
 
 def _update_mastery_ema(user_id: int, topic_id: str, score: float, total_marks: float = 5.0):
-    """Update topic mastery using Exponential Moving Average after each attempt."""
+    
     mastery = UserTopicMastery.query.filter_by(
         user_id=user_id, topic_id=topic_id
     ).first()
@@ -50,22 +49,13 @@ def _update_mastery_ema(user_id: int, topic_id: str, score: float, total_marks: 
 @problems_bp.route('/attempt', methods=['POST'])
 @token_required
 def save_attempt():
-    """Save a problem attempt result including canvas image and update neural mastery.
     
-    Deduplication: If the user has already attempted the exact same problem_text,
-    the existing attempt is updated (score, feedback, image_data) rather than
-    creating a duplicate entry. This keeps history clean and prevents the same
-    question from appearing multiple times in the sidebar.
-    
-    Supports session_id for grouping multi-question sessions and position for ordering.
-    """
     data = request.get_json()
     if not data or 'problem_text' not in data:
         return jsonify({'error': 'Missing problem_text'}), 400
 
     from flask import g
     
-    # ── Dedup: find existing attempt with same problem_text ──
     existing = ProblemAttempt.query.filter_by(
         user_id=g.current_user.id,
         problem_text=data['problem_text']
@@ -73,7 +63,6 @@ def save_attempt():
     
     is_update = False
     if existing:
-        # Update the existing attempt with latest work
         existing.answer_text = data.get('answer_text') or existing.answer_text
         existing.image_data = data.get('image_data') or existing.image_data
         existing.score = data.get('score') if data.get('score') is not None else existing.score
@@ -86,7 +75,6 @@ def save_attempt():
         attempt = existing
         is_update = True
     else:
-        # Determine position: auto-increment from last position
         last_pos = ProblemAttempt.query.filter_by(user_id=g.current_user.id) \
             .order_by(ProblemAttempt.position.desc()).first()
         next_pos = (last_pos.position + 1) if last_pos else 0
@@ -111,7 +99,6 @@ def save_attempt():
     
     db.session.commit()
 
-    # Update neural mastery tracking
     if data.get('topic_id') and data.get('score') is not None:
         try:
             _update_mastery_ema(
@@ -120,12 +107,11 @@ def save_attempt():
                 float(data['score']),
                 float(data.get('total_marks', 5.0))
             )
-            # Invalidate recommendation cache
             from models import RecommendationCache
             RecommendationCache.query.filter_by(user_id=g.current_user.id).delete()
             db.session.commit()
         except Exception:
-            pass  # Non-critical — don't fail the attempt save
+            pass  
 
     return jsonify({
         'attempt': attempt.to_dict(),
@@ -136,7 +122,7 @@ def save_attempt():
 @problems_bp.route('/attempts', methods=['GET'])
 @token_required
 def get_attempts():
-    """Get all attempts for the current user, ordered by position (drag order)."""
+    
     from flask import g
     limit = request.args.get('limit', 50, type=int)
     attempts = ProblemAttempt.query.filter_by(user_id=g.current_user.id) \
@@ -149,14 +135,14 @@ def get_attempts():
 @problems_bp.route('/attempts/reorder', methods=['POST'])
 @token_required
 def reorder_attempts():
-    """Persist drag-reordered history positions. Accepts list of {id, position}."""
+    
     from flask import g
     
     data = request.get_json()
     if not data or 'order' not in data:
         return jsonify({'error': 'Missing order list'}), 400
     
-    order = data['order']  # [{id: 5, position: 0}, {id: 3, position: 1}, ...]
+    order = data['order']  
     
     for item in order:
         attempt = ProblemAttempt.query.filter_by(
@@ -172,7 +158,7 @@ def reorder_attempts():
 @problems_bp.route('/next', methods=['GET'])
 @token_required
 def next_question():
-    """Get the next recommended question using per-question dedup + randomized recycling."""
+    
     from flask import g
     from sqlalchemy import not_
     import random as _random
@@ -183,9 +169,8 @@ def next_question():
     course = request.args.get('course', None)
     limit = request.args.get('limit', 1, type=int)
 
-    # ── Track attempted question IDs and per-question last attempt ──
     attempted_ids = set()
-    question_last_attempt = {}  # question_id → datetime
+    question_last_attempt = {}  
 
     attempts = ProblemAttempt.query.filter_by(user_id=user_id).all()
     for a in attempts:
@@ -196,7 +181,6 @@ def next_question():
             ):
                 question_last_attempt[a.question_id] = a.created_at
 
-    # Query the question bank
     query = Question.query
     if topic_id:
         query = query.filter(Question.topic_id == topic_id)
@@ -207,11 +191,9 @@ def next_question():
 
     all_questions = query.order_by(Question.difficulty).all()
 
-    # ── Separate fresh (never attempted) from recycled ──
     fresh = [q for q in all_questions if q.id not in attempted_ids]
     recycled = [q for q in all_questions if q.id in attempted_ids]
 
-    # Get user mastery data
     from models import UserTopicMastery
     masteries = {
         m.topic_id: m
@@ -222,7 +204,7 @@ def next_question():
     now = dt.datetime.utcnow()
 
     def score_question(q, is_recycled=False):
-        """Score a question with per-question recency + randomization for recycled."""
+        
         meta = TOPIC_META.get(q.topic_id, {})
         exam_weight = meta.get('exam_weight', q.hsc_exam_weight or 5)
         m = masteries.get(q.topic_id)
@@ -232,7 +214,6 @@ def next_question():
 
         gap = max(0.05, 1.0 - mastery_pct / 100.0)
 
-        # Per-question recency: exponential decay — penalty halves every 24h
         last_t = question_last_attempt.get(q.id)
         if last_t:
             hours_since = max(0, (now - last_t).total_seconds() / 3600.0)
@@ -246,7 +227,6 @@ def next_question():
         base = (exam_weight / 10.0) * gap * recency
 
         if is_recycled:
-            # Heavy penalty + random jitter so different questions surface
             jitter = _random.uniform(0.3, 1.7)
             return base * 0.25 * jitter * 100
         else:
@@ -254,7 +234,6 @@ def next_question():
 
     TOPIC_META = _get_topic_meta()
 
-    # Score fresh questions first
     scored = []
     for q in fresh:
         ys = score_question(q, is_recycled=False)
@@ -275,7 +254,6 @@ def next_question():
             'is_new': True,
         })
 
-    # If enough fresh, return them sorted
     if len(scored) >= limit:
         scored.sort(key=lambda x: x['yield_score'], reverse=True)
         return jsonify({
@@ -285,7 +263,6 @@ def next_question():
             'model': 'yield-heuristic',
         }), 200
 
-    # Add recycled questions with randomization
     for q in recycled:
         ys = score_question(q, is_recycled=True)
         m = masteries.get(q.topic_id)
@@ -317,7 +294,7 @@ def next_question():
 @problems_bp.route('/attempts/<int:attempt_id>', methods=['DELETE'])
 @token_required
 def delete_attempt(attempt_id):
-    """Hard-delete a problem attempt. Does NOT delete mastery/topic stats."""
+    
     from flask import g
     
     attempt = ProblemAttempt.query.filter_by(
@@ -327,7 +304,6 @@ def delete_attempt(attempt_id):
     if not attempt:
         return jsonify({'error': 'Attempt not found'}), 404
     
-    # Only delete the attempt — preserve UserTopicMastery and other stats
     db.session.delete(attempt)
     db.session.commit()
     
@@ -337,7 +313,7 @@ def delete_attempt(attempt_id):
 @problems_bp.route('/session/start', methods=['POST'])
 @token_required
 def start_session():
-    """Start a new study session."""
+    
     from flask import g
     data = request.get_json() or {}
     session = StudySession(
@@ -352,7 +328,7 @@ def start_session():
 @problems_bp.route('/session/end', methods=['PUT'])
 @token_required
 def end_session():
-    """End the current study session."""
+    
     import datetime
     from flask import g
     data = request.get_json() or {}
@@ -376,7 +352,7 @@ def end_session():
 @problems_bp.route('/stats', methods=['GET'])
 @token_required
 def user_stats():
-    """Return comprehensive user statistics for the dashboard."""
+    
     from flask import g
     from sqlalchemy import func
 
@@ -394,7 +370,6 @@ def user_stats():
     avg_score = sum(a.score or 0 for a in attempts) / total
     total_time = sum(a.time_spent_seconds or 0 for a in attempts)
 
-    # Per-topic breakdown
     topic_map = {}
     for a in attempts:
         tid = a.topic_id or 'unknown'
@@ -414,15 +389,12 @@ def user_stats():
             'mastery_pct': round(min(100, (avg / 5) * 100), 1)
         })
 
-    # Recent trend: last 10 attempts
     recent = sorted(attempts, key=lambda a: a.created_at or '', reverse=True)[:10]
     recent_trend = [{'score': a.score or 0, 'total': a.total_marks or 5, 'topic': a.topic_id} for a in recent]
 
-    # Strengths & weaknesses
     strengths = [t for t in by_topic if t['mastery_pct'] >= 70][:3]
     weaknesses = [t for t in by_topic if t['mastery_pct'] < 40][:3]
 
-    # Overall mastery estimate: weighted average by attempt count
     total_weight = sum(t['attempts'] for t in by_topic) or 1
     mastery_estimate = round(sum(t['mastery_pct'] * t['attempts'] for t in by_topic) / total_weight, 1)
 
@@ -442,22 +414,13 @@ def user_stats():
 @problems_bp.route('/recommendations', methods=['GET'])
 @token_required
 def recommend_problems():
-    """Gemini-powered recommendation engine for highest-yield problems.
-
-    Delegates to the Gemini recommender in routes/recommendations.py.
-    Falls back to heuristic calculator if Gemini unavailable.
-
-    Query params:
-        top_k  — number of recommendations (default 8)
-        course — filter: 'adv', 'mx1', 'mx2'
-    """
+    
     from flask import g
 
     user = g.current_user
     top_k = request.args.get('top_k', 8, type=int)
     course = request.args.get('course', None, type=str)
 
-    # Forward to the recommendations blueprint
     from routes.recommendations import _compute_all_heuristic_yields
     results = _compute_all_heuristic_yields(user.id, course)
 
@@ -468,18 +431,13 @@ def recommend_problems():
     })
 
 
-# ─── TopicMap progress mapping ─────────────────────────────────
-# Maps backend topic IDs to the TopicMap's internal node IDs
 TOPICMAP_ID_MAP = {
-    # Advanced
     'ma-f1': 'FUN', 'ma-t1': 'TRI', 'ma-c1': 'CAL', 'ma-e1': 'EXP',
     'ma-s1': 'STA', 'ma-f2': 'FUN', 'ma-t2': 'TRI', 'ma-c234': 'CAL',
     'ma-m1': 'FIN', 'ma-s23': 'STA',
-    # Extension 1
     'me-f1': 'FUN2', 'me-t12': 'TRI2', 'me-c1': 'CAL2', 'me-a1': 'COM',
     'me-p1': 'IND', 'me-v1': 'VEC', 'me-t3': 'TRI2', 'me-c23': 'INT',
     'me-s1': 'BIN',
-    # Extension 2
     'mex-p12': 'PRF', 'mex-v1': 'VEC2', 'mex-n12': 'CPX',
     'mex-c1': 'CAL3', 'mex-m1': 'MEC',
 }
@@ -487,20 +445,14 @@ TOPICMAP_ID_MAP = {
 @problems_bp.route('/topic-progress', methods=['GET'])
 @token_required
 def topic_progress():
-    """Return per-topic mastery for the TopicMap visualization.
     
-    Maps backend syllabus topics to TopicMap node IDs and returns
-    mastery percentages for rendering node colors/sizes.
-    """
     from flask import g
     from sqlalchemy import func
 
     user_id = g.current_user.id
     
-    # Get all mastery records for this user
     masteries = UserTopicMastery.query.filter_by(user_id=user_id).all()
     
-    # Aggregate by TopicMap node ID
     node_progress = {}
     for m in masteries:
         node_id = TOPICMAP_ID_MAP.get(m.topic_id)
@@ -512,7 +464,6 @@ def topic_progress():
         node_progress[node_id]['confidence'] += m.confidence
         node_progress[node_id]['count'] += 1
     
-    # Build response — mastery 0-1 scale
     progress = {}
     for node_id, data in node_progress.items():
         if data['confidence'] > 0:
@@ -524,7 +475,6 @@ def topic_progress():
                 (data['total'] / max(1, data['count'])) / 100.0, 3
             )
     
-    # Also include hub aggregates — only from nodes with real data
     adv_topics = ['FUN','TRI','CAL','EXP','STA','FIN']
     x1_topics = ['FUN2','TRI2','CAL2','COM','IND','VEC','INT','BIN']
     x2_topics = ['PRF','CPX','VEC2','CAL3','MEC']
@@ -540,7 +490,6 @@ def topic_progress():
     if hub_x2:
         progress['HUB_X2'] = round(sum(hub_x2) / len(hub_x2), 3)
     
-    # Build list of nodes that have real user data (trained nodes)
     trained_nodes = list(node_progress.keys())
     
     return jsonify({

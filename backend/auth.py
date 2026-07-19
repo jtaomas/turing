@@ -10,12 +10,11 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 
 def token_required(f):
-    """Decorator to require a valid JWT token."""
+    
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
 
-        # Check Authorization header
         auth_header = request.headers.get('Authorization', '')
         if auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
@@ -45,7 +44,7 @@ def token_required(f):
 
 @auth_bp.route('/google', methods=['POST'])
 def google_login():
-    """Exchange a Google ID token for a local JWT."""
+    
     data = request.get_json()
     if not data or 'idToken' not in data:
         return jsonify({'error': 'Missing idToken'}), 400
@@ -54,7 +53,6 @@ def google_login():
     google_client_id = current_app.config['GOOGLE_CLIENT_ID']
 
     try:
-        # Verify the Google ID token
         from google.oauth2 import id_token as google_id_token
         from google.auth.transport import requests as google_requests
 
@@ -72,7 +70,6 @@ def google_login():
         display_name = id_info.get('name', email.split('@')[0])
         picture_url = id_info.get('picture', None)
 
-        # Find or create user
         user = User.query.filter(
             (User.google_id == google_id) | (User.email == email)
         ).first()
@@ -94,7 +91,6 @@ def google_login():
 
         db.session.commit()
 
-        # Generate local JWT
         token = jwt.encode(
             {
                 'user_id': user.id,
@@ -119,14 +115,14 @@ def google_login():
 @auth_bp.route('/me', methods=['GET'])
 @token_required
 def get_current_user():
-    """Get the currently authenticated user."""
+    
     return jsonify({'user': g.current_user.to_dict()}), 200
 
 
 @auth_bp.route('/profile', methods=['PUT'])
 @token_required
 def update_profile():
-    """Update user profile fields."""
+    
     data = request.get_json()
     user = g.current_user
 

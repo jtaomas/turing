@@ -7,9 +7,7 @@ interface MathRendererProps {
 }
 
 function renderLatexString(latex: string): string {
-  // Process display math $$...$$ first, then inline $...$
   let html = latex;
-  // Display math: $$...$$
   html = html.replace(/\$\$([^$]+)\$\$/g, (_, math: string) => {
     try {
       return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false, strict: false });
@@ -17,7 +15,6 @@ function renderLatexString(latex: string): string {
       return `<span class="text-red-400">${math}</span>`;
     }
   });
-  // Inline math: $...$ (but not $$)
   html = html.replace(/(?<!\$)\$(?!\$)([^$]+?)\$(?!\$)/g, (_, math: string) => {
     try {
       return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false, strict: false });

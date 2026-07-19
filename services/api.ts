@@ -41,7 +41,6 @@ async function request<T>(
   return response.json();
 }
 
-// --- Auth ---
 export interface User {
   id: number;
   google_id: string | null;
@@ -80,7 +79,6 @@ export async function updateProfile(profile: Partial<User>): Promise<{ user: Use
   });
 }
 
-// --- Hints ---
 export interface HintResponse {
   hint: string;
   level: 'concept' | 'strategy' | 'ai';
@@ -97,7 +95,6 @@ export async function generateHint(
   });
 }
 
-// --- Transcribe & Mark ---
 export interface MarkResult {
   transcription?: string;
   score: number;
@@ -120,7 +117,6 @@ export async function transcribeAndMark(
   });
 }
 
-// --- Problem Attempts ---
 export interface ProblemAttempt {
   id: number;
   user_id: number;
@@ -162,7 +158,6 @@ export async function reorderAttempts(order: Array<{ id: number; position: numbe
   });
 }
 
-// --- Question Bank ---
 export interface NextQuestion {
   question_id: number;
   question_text: string;
@@ -200,7 +195,6 @@ export async function getNextQuestion(params: {
   return request(`/problems/next?${qs.toString()}`);
 }
 
-// --- Neural Recommendations ---
 export interface TopicRecommendation {
   topic_id: string;
   topic_name?: string;
@@ -216,8 +210,8 @@ export interface TopicRecommendation {
   is_prerequisite: boolean;
   model: string;
   subtopics?: string[];
-  reasoning?: string;      // Gemini-powered explanation
-  priority_label?: string;  // HIGH / MEDIUM / LOW
+  reasoning?: string;      
+  priority_label?: string;  
 }
 
 export interface NeuralRecommendationsResponse {
@@ -225,7 +219,7 @@ export interface NeuralRecommendationsResponse {
   model: string;
   source: string;
   total_evaluated?: number;
-  summary?: string;  // Gemini-powered study strategy summary
+  summary?: string;  
 }
 
 export async function getNeuralRecommendations(
@@ -240,7 +234,6 @@ export async function getNeuralRecommendations(
   return request(`/recommendations/neural?${params.toString()}`);
 }
 
-// --- Set Analysis (Gemini) ---
 export interface SetAnalysis {
   difficulty: number;
   estimated_topic_ids: string[];

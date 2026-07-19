@@ -19,7 +19,6 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     last_login = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
-    # Relationships
     sessions = db.relationship('StudySession', backref='user', lazy='dynamic')
     problem_attempts = db.relationship('ProblemAttempt', backref='user', lazy='dynamic')
     topic_masteries = db.relationship('UserTopicMastery', backref='user', lazy='dynamic')
@@ -40,22 +39,21 @@ class User(db.Model):
 
 
 class Question(db.Model):
-    """Canonical question bank — every problem in the system."""
+    
     __tablename__ = 'questions'
 
     id = db.Column(db.Integer, primary_key=True)
     topic_id = db.Column(db.String(100), nullable=False, index=True)
     subtopic = db.Column(db.String(255), nullable=True)
     question_text = db.Column(db.Text, nullable=False)
-    difficulty = db.Column(db.Float, default=3.0)          # 1.0–5.0 (Band 2 → Band 6)
-    hsc_marks = db.Column(db.Float, default=3.0)            # typical marks in HSC exam
-    hsc_exam_weight = db.Column(db.Float, default=5.0)      # topic % weight in HSC
-    yield_score = db.Column(db.Float, default=50.0)         # neural-predicted yield (0–100)
-    course = db.Column(db.String(20), default='adv')        # adv, mx1, mx2
-    year_level = db.Column(db.Integer, default=12)           # 11 or 12
+    difficulty = db.Column(db.Float, default=3.0)          
+    hsc_marks = db.Column(db.Float, default=3.0)            
+    hsc_exam_weight = db.Column(db.Float, default=5.0)      
+    yield_score = db.Column(db.Float, default=50.0)         
+    course = db.Column(db.String(20), default='adv')        
+    year_level = db.Column(db.Integer, default=12)           
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
-    # Relationships
     attempts = db.relationship('ProblemAttempt', backref='question', lazy='dynamic')
 
     def to_dict(self):
@@ -74,25 +72,25 @@ class Question(db.Model):
 
 
 class TopicEmbedding(db.Model):
-    """Learned 32-dimensional embedding for each syllabus topic."""
+    
     __tablename__ = 'topic_embeddings'
 
     id = db.Column(db.Integer, primary_key=True)
     topic_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
-    embedding_json = db.Column(db.Text, nullable=False)      # JSON-serialised float[32]
+    embedding_json = db.Column(db.Text, nullable=False)      
     version = db.Column(db.Integer, default=1)
     updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
 
 class UserTopicMastery(db.Model):
-    """Per-user, per-topic mastery estimate updated by the neural model."""
+    
     __tablename__ = 'user_topic_masteries'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     topic_id = db.Column(db.String(100), nullable=False)
-    mastery_pct = db.Column(db.Float, default=0.0)            # 0–100
-    confidence = db.Column(db.Float, default=0.0)             # model confidence (0–1)
+    mastery_pct = db.Column(db.Float, default=0.0)            
+    confidence = db.Column(db.Float, default=0.0)             
     attempts_count = db.Column(db.Integer, default=0)
     avg_score = db.Column(db.Float, default=0.0)
     last_attempt_at = db.Column(db.DateTime, nullable=True)
@@ -114,12 +112,12 @@ class UserTopicMastery(db.Model):
 
 
 class RecommendationCache(db.Model):
-    """Cached neural recommendations so we don't recompute on every request."""
+    
     __tablename__ = 'recommendation_cache'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    recommendations_json = db.Column(db.Text, nullable=False)  # JSON list of topic recs
+    recommendations_json = db.Column(db.Text, nullable=False)  
     model_version = db.Column(db.String(50), default='v1')
     generated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=False)
@@ -160,18 +158,18 @@ class ProblemAttempt(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=True)
-    session_id = db.Column(db.String(64), nullable=True, index=True)  # groups multi-qn sessions
-    position = db.Column(db.Integer, default=0)  # for drag reorder in history
+    session_id = db.Column(db.String(64), nullable=True, index=True)  
+    position = db.Column(db.Integer, default=0)  
     topic_id = db.Column(db.String(100), nullable=True)
     subtopic = db.Column(db.String(255), nullable=True)
     problem_text = db.Column(db.Text, nullable=False)
     answer_text = db.Column(db.Text, nullable=True)
-    image_data = db.Column(db.Text, nullable=True)  # base64 canvas drawing
+    image_data = db.Column(db.Text, nullable=True)  
     score = db.Column(db.Float, nullable=True)
     total_marks = db.Column(db.Float, default=5.0)
     feedback = db.Column(db.Text, nullable=True)
     time_spent_seconds = db.Column(db.Integer, default=0)
-    input_mode = db.Column(db.String(20), default='draw')  # draw, text, upload
+    input_mode = db.Column(db.String(20), default='draw')  
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     def to_dict(self):
@@ -201,7 +199,7 @@ class HintLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     problem_text = db.Column(db.Text, nullable=False)
-    hint_type = db.Column(db.String(20), nullable=False)  # concept, strategy, ai
+    hint_type = db.Column(db.String(20), nullable=False)  
     hint_content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 

@@ -1,4 +1,4 @@
-"""Question bank analysis + Advanced question generator"""
+
 from app import create_app
 from models import db, Question
 from sqlalchemy import func
@@ -29,7 +29,7 @@ with app.app_context():
         cnt = Question.query.filter_by(topic_id=tid).count()
         course = TOPIC_META[tid].get('course', '?')
         name = TOPIC_NAMES.get(tid, tid)
-        bar = '#' * min(40, cnt) if cnt > 0 else '(empty)'
+        bar = '
         if cnt < 10:
             print(f"  {tid:12s} ({course}) {name:35s}: {cnt:4d} {bar}")
     
