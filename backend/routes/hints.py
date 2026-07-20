@@ -1,134 +1,83 @@
 from flask import Blueprint, request, jsonify, current_app
-import json as json_lib
-import re
-import traceback
-import base64
-import io
-from io import BytesIO
-from openai import OpenAI
-from pydantic import BaseModel, Field
-from typing import List, Optional
+import os, base64, json as json_lib, re, traceback, requests
+from flask import Blueprint, request, jsonify, current_app, g
 from google import genai
 from google.genai import types as genai_types
-from PIL import Image
 from models import db, HintLog
 from auth import token_required
 
 hints_bp = Blueprint('hints', __name__, url_prefix='/api')
 
-DEEPSEEK_MODEL = 'deepseek-v4-pro'
-GEMINI_VISION_MODEL = 'gemini-2.0-flash'
+SYSTEM_PROMPT = (
+    "You are an expert Mathematics Assessor and Marker. Your job is to rigorously evaluate student solutions "
+    "against a provided question, sample solution, and marking criteria.\n\n"
+    "Follow these strict rules when evaluating:\n"
+    "1. First Principles Verification: Do not just check if the student's final answer matches the sample solution. "
+    "Manually compute or verify every single logical step, algebraic manipulation, or calculus operation the student performs.\n"
+    "2. LaTeX Parsing: Interpret standard mathematical notations written in LaTeX ($...$ or $$...$$).\n"
+    "3. Error Isolation: If a student makes a mistake early in a multi-part calculation, isolate that specific error. "
+    "Check if their subsequent steps are mathematically valid based on their initial error "
+    "(Carry-Through Error / Error Carried Forward). Award partial credit if subsequent logic is correct "
+    "based on the false premise, unless the mistake trivializes the problem.\n"
+    "4. Mathematical Rigor: Flag missing conditions (e.g., forgetting '+ C' in an indefinite integral, "
+    "missing boundary conditions, or division by zero errors).\n\n"
+    "Output strictly in JSON format with the fields: is_correct, score_awarded, total_possible_marks, "
+    "step_by_step_analysis, identified_errors, constructive_feedback."
+)
 
-
-class StepEvaluation(BaseModel):
-    step_number: int
-    transcription_latex: str = Field(description="LaTeX transcription of this step")
-    is_correct: bool
-    error_analysis: Optional[str] = Field(None, description="Explanation if incorrect")
-
-class MarkingReport(BaseModel):
-    detected_problem: str = Field(description="The problem parsed from the image")
-    final_answer_extracted: str = Field(description="Student's final answer")
-    is_final_answer_correct: bool
-    steps_breakdown: List[StepEvaluation]
-    overall_feedback: str = Field(description="Constructive guidance for the student")
-    assigned_score: int = Field(description="Score out of 100")
-
-
-def _call_deepseek(messages: list, temperature: float = 0.1, max_tokens: int = 2048) -> str | None:
-    
-    api_key = current_app.config.get('DEEPSEEK_API_KEY', '')
-    if not api_key:
-        return None
-    try:
-        client = OpenAI(api_key=api_key, base_url='https://api.deepseek.com')
-        response = client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stream=False,
-        )
-        msg = response.choices[0].message
-        content = msg.content or ''
-        reasoning = getattr(msg, 'reasoning_content', '') or ''
-        result = content.strip() if content.strip() else reasoning.strip()
-        return result if result else None
-    except Exception as e:
-        current_app.logger.warning(f'DeepSeek call failed: {e}')
-        return None
-
-
-def _call_gemini_vision(image_b64: str, problem_text: str) -> dict | None:
-    
+def _call_gemini_mark(problem_text: str, student_work: str, image_b64: str = '') -> dict | None:
     api_key = current_app.config.get('GEMINI_API_KEY', '')
     if not api_key:
         return None
-    try:
-        client = genai.Client(api_key=api_key)
 
-        system_prompt = (
-            "You are an expert NESA HSC Mathematics marker with 20 years of experience marking Extension 2 papers. "
-            "Analyze the image of a handwritten or typed math solution and evaluate it against HSC marking guidelines.\n\n"
-            "CRITICAL PROTOCOLS:\n"
-            "1. Identify the core mathematical question from the image.\n"
-            "2. Transcribe the student's working into LaTeX blocks ($...$ for inline, $$...$$ for display).\n"
-            "3. Step-by-step audit: Check each mathematical transition for correctness, notation, and HSC conventions.\n"
-            "4. Track error propagation — if an early error cascades, note it but still credit subsequent correct reasoning.\n"
-            "5. Assign a score out of 100 reflecting NESA band descriptors:\n"
-            "   - Band 6 (90-100): Flawless reasoning, correct notation, elegant solution\n"
-            "   - Band 5 (80-89): Sound reasoning with minor notation/arithmetic slips\n"
-            "   - Band 4 (70-79): Adequate understanding but incomplete reasoning or significant errors\n"
-            "   - Band 3 (50-69): Basic understanding, substantial errors, incomplete\n"
-            "   - Band 2 (25-49): Limited understanding, major conceptual errors\n"
-            "   - Band 1 (0-24): Minimal or no relevant working\n"
-            "6. Provide constructive, specific feedback with LaTeX references to the student's steps.\n"
-            "7. For each annotation step, include the student's transcribed LaTeX and your assessment."
-        )
+    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={api_key}'
 
-        raw_bytes = base64.b64decode(image_b64)
+    user_content = f"""QUESTION:
+{problem_text}
 
-        response = client.models.generate_content(
-            model=GEMINI_VISION_MODEL,
-            contents=[
-                genai_types.Part.from_bytes(data=raw_bytes, mime_type='image/png'),
-                genai_types.Part.from_text(
-                    text=f"Problem: {problem_text}\n\n"
-                    "Please grade this math submission. Check the working line-by-line. "
-                    "Output the result as structured JSON matching the required schema."
-                ),
-            ],
-            config=genai_types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0.1,
-                response_mime_type='application/json',
-                response_schema=MarkingReport,
-            )
-        )
+STUDENT SUBMISSION:
+{student_work or '[No text submitted — see image]'}"""
 
-        text = response.text
-        report = json_lib.loads(text) if isinstance(text, str) else text
-        
-        total_marks = max(5, len(report.get('steps_breakdown', [])) * 2)
-        final_score = max(1, min(total_marks, round((report.get('assigned_score', 50) / 100) * total_marks)))
+    parts = [{'text': user_content}]
+    if image_b64:
+        parts.insert(0, {
+            'inline_data': {
+                'mime_type': 'image/png',
+                'data': image_b64
+            }
+        })
 
-        annotations = []
-        for step in report.get('steps_breakdown', []):
-            annotations.append({
-                'step': f"Step {step.get('step_number', '?')}: {step.get('transcription_latex', '')}",
-                'status': 'correct' if step.get('is_correct', False) else 'error',
-                'detail': step.get('error_analysis', 'Correct step.') if not step.get('is_correct', True) else 'Correctly applied.',
-            })
-
-        return {
-            'score': final_score,
-            'totalMarks': total_marks,
-            'overall': report.get('overall_feedback', 'Solution reviewed.'),
-            'annotations': annotations,
+    payload = {
+        'contents': [{'role': 'user', 'parts': parts}],
+        'systemInstruction': {'parts': [{'text': SYSTEM_PROMPT}]},
+        'generationConfig': {
+            'temperature': 0.1,
+            'responseMimeType': 'application/json',
+            'responseSchema': {
+                'type': 'OBJECT',
+                'properties': {
+                    'is_correct': {'type': 'BOOLEAN'},
+                    'score_awarded': {'type': 'INTEGER'},
+                    'total_possible_marks': {'type': 'INTEGER'},
+                    'step_by_step_analysis': {'type': 'STRING'},
+                    'identified_errors': {'type': 'ARRAY', 'items': {'type': 'STRING'}},
+                    'constructive_feedback': {'type': 'STRING'}
+                },
+                'required': ['is_correct', 'score_awarded', 'total_possible_marks', 'step_by_step_analysis', 'identified_errors', 'constructive_feedback']
+            }
         }
+    }
 
+    try:
+        resp = requests.post(url, headers={'Content-Type': 'application/json'}, data=json_lib.dumps(payload), timeout=60)
+        if resp.status_code != 200:
+            current_app.logger.warning(f'Gemini API error {resp.status_code}: {resp.text[:300]}')
+            return None
+        data = resp.json()
+        text = data['candidates'][0]['content']['parts'][0]['text']
+        return json_lib.loads(text)
     except Exception as e:
-        current_app.logger.error(f'Gemini vision marking failed: {e}')
+        current_app.logger.warning(f'Gemini mark failed: {e}')
         return None
 
 
@@ -434,9 +383,6 @@ def generate_hint():
 
 @hints_bp.route('/transcribe-and-mark', methods=['POST'])
 def transcribe_and_mark():
-    
-    from flask import g
-
     data = request.get_json()
     if not data or 'problemDescription' not in data:
         return jsonify({'error': 'Missing problemDescription'}), 400
@@ -444,101 +390,31 @@ def transcribe_and_mark():
     problem_text = data['problemDescription']
     image_b64 = data.get('imageBase64', '')
     text_answer = data.get('textAnswer', '')
-    topic_id = data.get('topicId', '')
 
-    api_key = current_app.config.get('DEEPSEEK_API_KEY', '')
-    used_ai = False
-    result = {}
-    error_detail = None
+    student_work = text_answer if text_answer.strip() else ''
+    gemini_result = _call_gemini_mark(problem_text, student_work, image_b64)
 
-    if image_b64:
-        gemini_result = _call_gemini_vision(image_b64, problem_text)
-        if gemini_result:
-            gemini_result['ai'] = True
-            return jsonify(gemini_result), 200
-        else:
-            error_detail = 'Gemini vision marking failed — check GEMINI_API_KEY in backend/.env'
+    if gemini_result:
+        total = gemini_result.get('total_possible_marks', 5)
+        score = gemini_result.get('score_awarded', 0)
+        return jsonify({
+            'score': score,
+            'totalMarks': total,
+            'overall': gemini_result.get('constructive_feedback', 'Solution reviewed.'),
+            'annotations': [
+                {'step': gemini_result.get('step_by_step_analysis', 'Analysis unavailable.'), 'status': 'correct' if gemini_result.get('is_correct', False) else 'error', 'detail': '; '.join(gemini_result.get('identified_errors', [])) or 'No errors identified.'}
+            ],
+            'ai': True,
+        }), 200
 
-    if not used_ai and api_key and text_answer and text_answer.strip():
-        try:
-            system_msg = (
-                "You are an experienced NESA HSC Mathematics marker. "
-                "Respond directly with ONLY the JSON. Do NOT include any reasoning, chain-of-thought, or explanation outside the JSON. "
-                "You ALWAYS return ONLY valid JSON (no markdown, no explanation) with this exact structure:\n"
-                '{"score": <number>, "totalMarks": <number>, "overall": "<2-4 sentence feedback with specific mathematical guidance>", '
-                '"annotations": [{"step": "<LaTeX description of the step>", "status": "correct|error|partial", "detail": "<specific feedback referencing HSC conventions and the student\'s working>"}]}\n'
-                "Use LaTeX ($...$) in step and detail fields. Be specific about mathematical errors, notation issues, and HSC marking criteria. "
-                "Total marks should match problem complexity (3-15 for typical HSC questions). Provide 3-6 detailed annotations. "
-                "Score according to NESA bands: 90-100 = Band 6, 80-89 = Band 5, 70-79 = Band 4, 50-69 = Band 3, 25-49 = Band 2, 0-24 = Band 1."
-            )
-
-            user_content = (
-                f"Problem: {problem_text}\n\n"
-                f"Student's submitted solution:\n```\n{text_answer}\n```\n\n"
-                "Mark this solution step by step. Return ONLY JSON."
-            )
-
-            raw = _call_deepseek([
-                {'role': 'system', 'content': system_msg},
-                {'role': 'user', 'content': user_content},
-            ], temperature=0.1, max_tokens=2048)
-
-            if raw:
-                raw = re.sub(r'^```(?:json)?\s*\n?', '', raw)
-                raw = re.sub(r'\n?```\s*$', '', raw)
-                result = json_lib.loads(raw)
-
-                if not isinstance(result, dict):
-                    raise ValueError('DeepSeek returned non-dict')
-                if 'annotations' not in result or not isinstance(result['annotations'], list):
-                    result['annotations'] = []
-                if 'score' not in result:
-                    result['score'] = 0
-                if 'totalMarks' not in result:
-                    result['totalMarks'] = max(5, len(result['annotations']) * 2)
-                if 'overall' not in result:
-                    result['overall'] = 'Solution reviewed.'
-
-                result['score'] = max(0, min(float(result['totalMarks']), float(result['score'])))
-                result['totalMarks'] = float(result['totalMarks'])
-
-                for ann in result['annotations']:
-                    if ann.get('status') not in ('correct', 'error'):
-                        ann['status'] = 'correct' if 'correct' in str(ann.get('status', '')).lower() else 'error'
-
-                used_ai = True
-
-        except Exception as e:
-            error_detail = f'DeepSeek failed: {str(e)[:200]}'
-            current_app.logger.warning(f'Marking AI error: {traceback.format_exc()}')
-
-    if not used_ai:
-        if text_answer and text_answer.strip():
-            result = build_fallback_marking_result(problem_text, text_answer)
-        elif image_b64 and not text_answer:
-            result = {
-                'score': 0, 'totalMarks': 5,
-                'overall': 'Could not analyse your canvas drawing. The Gemini API key may be missing or invalid — check GEMINI_API_KEY in backend/.env. Alternatively, type your solution in the text area instead.',
-                'annotations': [
-                    {'step': 'Vision failed', 'status': 'error',
-                     'detail': error_detail or 'Gemini 3.5 Flash could not process the image. Verify GEMINI_API_KEY is set in backend/.env and is valid from https://aistudio.google.com/apikey'},
-                    {'step': 'Alternative', 'status': 'correct',
-                     'detail': 'Type your mathematical working in the text area below the canvas for text-based AI marking.'},
-                ],
-            }
-        else:
-            result = {
-                'score': 0, 'totalMarks': 5,
-                'overall': 'No answer submitted. Draw your working on the canvas OR type your solution in the text area, then click Mark.',
-                'annotations': [
-                    {'step': 'Submission', 'status': 'error', 'detail': 'No working was detected. Draw or type your solution first.'},
-                ],
-            }
-
-    result['ai'] = used_ai
-    if error_detail and not used_ai:
-        result['errorDetail'] = error_detail
-    return jsonify(result), 200
+    return jsonify({
+        'score': 0, 'totalMarks': 5,
+        'overall': 'AI marking unavailable. Check GEMINI_API_KEY in backend/.env and ensure the key is valid.',
+        'annotations': [
+            {'step': 'Marking unavailable', 'status': 'error', 'detail': 'Gemini 2.5 Pro could not process this submission. Verify your API key or try typing your solution.'},
+        ],
+        'ai': False,
+    }), 200
 
 
 @hints_bp.route('/analyze-set', methods=['POST'])
