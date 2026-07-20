@@ -41,6 +41,7 @@ def _update_mastery_ema(user_id: int, topic_id: str, score: float, total_marks: 
         (mastery.avg_score * (mastery.attempts_count - 1) + score)
         / mastery.attempts_count
     )
+    
     mastery.last_attempt_at = datetime.datetime.utcnow()
     mastery.updated_at = datetime.datetime.utcnow()
     db.session.commit()
@@ -187,9 +188,7 @@ def next_question():
     if subtopic:
         query = query.filter(Question.subtopic == subtopic)
     if course:
-        hierarchy = {'adv': ['adv'], 'mx1': ['mx1', 'adv'], 'mx2': ['mx2', 'mx1', 'adv']}
-        courses = hierarchy.get(course, [course])
-        query = query.filter(Question.course.in_(courses))
+        query = query.filter(Question.course == course)
 
     all_questions = query.order_by(Question.difficulty).all()
 
