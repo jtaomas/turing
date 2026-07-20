@@ -28,6 +28,7 @@ interface HistoryEntry {
   answer?: string;
   imageData?: string;  
   attemptId?: number;  
+  sessionId?: string;
 }
 
 function TypewriterText({ text, delay }: { text: string; delay: number }) {
@@ -488,6 +489,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
       id: `h_${Date.now()}`, question,
       topicName: tName, subtopicName: sName || undefined,
       courseId: effectiveCourse as 'adv'|'mx1'|'mx2', yearLevel, createdAt: new Date(),
+      sessionId: ensureSessionId(),
     };
     setHistory(prev => {
       const normQ = question.trim().replace(/\s+/g, ' ');
