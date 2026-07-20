@@ -245,7 +245,8 @@ def next_question():
             jitter = _random.uniform(0.3, 1.7)
             return base * 0.25 * jitter * 100
         else:
-            return base * 100
+            jitter = _random.uniform(0.5, 1.5)
+            return base * jitter * 100
 
     TOPIC_META = _get_topic_meta()
 
