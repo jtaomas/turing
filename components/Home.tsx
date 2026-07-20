@@ -687,12 +687,12 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                 <ArrowRight size={14} />
               </button>
               <div className="w-px h-5 bg-white/[0.06] mx-1" />
-              <button onClick={() => handleGenerate(null)} disabled={problemLoading}
+              <button onClick={() => handleGenerate()} disabled={problemLoading}
                 title="New question"
                 className="px-3 py-2 text-neutral-500 hover:text-neutral-300 hover:bg-white/[0.03] border border-white/[0.05] bg-transparent transition-colors">
                 {problemLoading ? <Spinner size={14} /> : <RefreshCw size={14} />}
               </button>
-              <button onClick={() => handleGenerate(null)} disabled={problemLoading}
+              <button onClick={() => handleGenerate()} disabled={problemLoading}
                 title="Skip"
                 className="px-3 py-2 text-neutral-500 hover:text-neutral-300 hover:bg-white/[0.03] border border-white/[0.05] bg-transparent transition-colors">
                 <StepForward size={14} />
@@ -905,7 +905,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                     {formatTime(testTimeLeft)}
                   </span>
                 )}
-                <button onClick={() => handleGenerate(null)} disabled={problemLoading}
+                <button onClick={() => handleGenerate()} disabled={problemLoading}
                   className="px-4 py-1.5 bg-white text-black text-[11px] font-semibold border-0 hover:bg-neutral-200 transition-colors disabled:opacity-40">
                   {problemLoading ? <Spinner size={12} /> : 'New'}
                 </button>
@@ -1026,20 +1026,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                         )}
                       </div>
                     </div>
-
-
-                    {step>=2&&(
-                      <div className="border-t border-white/[0.04] px-5 py-3 flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-600">
-                          {selectedTopicId ? currentTopic?.name.split('(')[0].trim() : 'Select a topic'}
-                          {selectedSubtopic ? ` → ${selectedSubtopic.replace(/^[A-Z0-9.]+:\\s*/, '')}` : ''}
-                        </span>
-                        <button onClick={() => handleGenerate(null)} disabled={problemLoading}
-                          className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-[11px] font-bold border-0 transition-colors disabled:opacity-40">
-                          {problemLoading ? <Spinner size={12} /> : currentProblem ? 'Next Question' : 'Generate'}
-                        </button>
-                      </div>
-                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
