@@ -2,8 +2,7 @@ import sys, os, json, argparse
 sys.path.insert(0, os.path.dirname(__file__))
 
 import pdfplumber
-from google import genai
-from google.genai import types as genai_types
+from openai import OpenAI
 from app import create_app
 from models import db, Question
 
@@ -24,13 +23,13 @@ def extract_text_from_pdf(filepath):
                 pages.append({'page': i + 1, 'text': text})
     return pages
 
-def extract_questions_with_gemini(pages, course_name):
-    api_key = os.getenv('GEMINI_API_KEY', '')
+def extract_questions_with_deepseek(pages, course_name):
+    api_key = os.getenv('DEEPSEEK_API_KEY', '')
     if not api_key:
-        print('ERROR: GEMINI_API_KEY not set in .env')
+        print('ERROR: DEEPSEEK_API_KEY not set in .env')
         return []
 
-    client = genai.Client(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url='https://api.deepseek.com')
 
     all_text = ''
     for p in pages:
@@ -62,15 +61,13 @@ Here is the PDF text:
 {all_text[:50000]}"""
 
     try:
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt,
-            config=genai_types.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=8192,
-            ),
+        response = client.chat.completions.create(
+            model='deepseek-v4-pro',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.1,
+            max_tokens=8192,
         )
-        raw = response.text or ''
+        raw = response.choices[0].message.content or ''
         start = raw.find('[')
         end = raw.rfind(']')
         if start >= 0 and end > start:
@@ -78,7 +75,7 @@ Here is the PDF text:
         data = json.loads(raw)
         return data
     except Exception as e:
-        print(f'  Gemini error: {e}')
+        print(f'  DeepSeek error: {e}')
         return []
 
 def main():
@@ -106,7 +103,7 @@ def main():
             pages = extract_text_from_pdf(path)
             print(f'  Extracted {len(pages)} pages of text')
 
-            questions = extract_questions_with_gemini(pages, args.course)
+            questions = extract_questions_with_deepseek(pages, args.course)
             for q_data in questions:
                 text = (q_data.get('text') or '').strip()
                 if len(text) < 20:
