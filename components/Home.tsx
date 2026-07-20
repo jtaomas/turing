@@ -47,11 +47,11 @@ function TypewriterText({ text, delay }: { text: string; delay: number }) {
 interface HomeProps {
   sessionMode?: SessionMode | null;
   onClearSession?: () => void;
-  historyQuestion?: string | null;
+  historyEntries?: Array<{ question: string }> | null;
   onHistoryLoaded?: () => void;
 }
 
-const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestion, onHistoryLoaded }) => {
+const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyEntries, onHistoryLoaded }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -131,16 +131,18 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
   }, [history]);
 
   useEffect(() => {
-    if (historyQuestion) {
-      setCurrentProblem(historyQuestion);
+    if (historyEntries && historyEntries.length > 0) {
+      setCurrentProblem(historyEntries[0].question);
       setWorkspaceOpen(true);
       setLauncherCollapsed(true);
       setFilterBodyOpen(false);
       setHintText(null);
       setMarkingResult(null);
+      setQuestionStack(historyEntries.map(e => e.question));
+      setStackPos(0);
       onHistoryLoaded?.();
     }
-  }, [historyQuestion]);
+  }, [historyEntries]);
 
   const restoreCanvasImage = (base64: string) => {
     const canvas = canvasRef.current;
@@ -162,12 +164,13 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
   };
 
   useEffect(() => {
-    if (!historyQuestion) return;
-    const entry = history.find(h => h.question === historyQuestion);
+    if (!historyEntries || historyEntries.length === 0) return;
+    const firstQ = historyEntries[0].question;
+    const entry = history.find(h => h.question === firstQ);
     if (entry?.imageData) {
       setTimeout(() => restoreCanvasImage(entry.imageData!), 100);
     }
-  }, [historyQuestion, history]);
+  }, [historyEntries, history]);
 
   const h = new Date().getHours();
   const greeting = h < 5 || h >= 22 ? 'Good Evening' : h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening';
