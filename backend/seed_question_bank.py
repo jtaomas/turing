@@ -35,7 +35,7 @@ COURSES = {
 }
 
 def generate_topic_questions(client, course, topic, description):
-    prompt = f"""Generate exactly 30 unique NSW HSC mathematics questions for the topic "{topic}" in the course "{course}".
+    prompt = f"""Generate exactly 10 unique NSW HSC mathematics questions for the topic "{topic}" in the course "{course}".
 
 Topic scope: {description}
 
@@ -48,7 +48,7 @@ Requirements:
 - NSW HSC style: worded problems, proofs, calculations, applications
 - Year 12 level
 
-Return ONLY a JSON array of 30 objects with fields:
+Return ONLY a JSON array of 10 objects with fields:
 - "text": the complete question with LaTeX
 - "difficulty": number from 2.0 to 5.0
 
@@ -81,13 +81,15 @@ def main():
     app = create_app()
 
     with app.app_context():
-        Question.query.delete()
-        db.session.commit()
-
         total = 0
         for course, topics in COURSES.items():
             print(f'\n{course}')
             for topic, desc in topics:
+                existing = Question.query.filter_by(topic_id=topic, course=course).count()
+                if existing > 0:
+                    print(f'  {topic}: SKIP ({existing} already exist)')
+                    total += existing
+                    continue
                 print(f'  Generating {topic}...')
                 questions = generate_topic_questions(client, course, topic, desc)
                 for q in questions:
