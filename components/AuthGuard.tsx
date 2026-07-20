@@ -66,6 +66,7 @@ const AuthGuardInner: React.FC<{
     return (
       <div className="min-h-screen bg-[#07080a] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
+          <img src="/logo.png" alt="Turing" className="w-12 h-12" />
           <Loader2 size={32} className="animate-spin text-emerald-400" />
           <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 mono-font">
             Authenticating...
@@ -97,6 +98,7 @@ const AuthGuardInner: React.FC<{
         <div className="min-h-screen bg-[#07080a] flex items-center justify-center">
           <div className="w-full max-w-sm space-y-6 p-8">
             <div className="text-center space-y-2">
+              <img src="/logo.png" alt="Turing" className="w-16 h-16 mx-auto mb-2" />
               <h1 className="text-2xl font-bold text-white">Turing</h1>
               <p className="text-xs text-neutral-400">Sign in to continue</p>
             </div>
