@@ -54,7 +54,7 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [step, setStep] = useState<1|2|3>(1);
+  const [step, setStep] = useState<1|2>(1);
   const [yearLevel, setYearLevel] = useState<11|12>(() => {
     const saved = localStorage.getItem('turing_year_level');
     return saved === '11' ? 11 : 12;
@@ -548,18 +548,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
     const fullCourse = { adv: 'Advanced', mx1: 'Extension 1', mx2: 'Extension 2' }[courseId];
     breadcrumbSegments.push({ full: fullCourse, short: shortCourse[courseId] });
   }
-  if (feedDetails?.topicName) {
-    const topicClean = feedDetails.topicName.split('(')[0].trim();
-    const words = topicClean.split(' ');
-    const topicShort = words.length > 2 ? words.slice(0, 2).join(' ') + '…' : topicClean;
-    breadcrumbSegments.push({ full: topicClean, short: topicShort });
-  }
-  if (feedDetails?.subtopicName) {
-    const subClean = feedDetails.subtopicName.replace(/^[A-Z0-9.]+:\s*/, '');
-    const words = subClean.split(' ');
-    const subShort = words.length > 3 ? words.slice(0, 3).join(' ') + '…' : subClean;
-    breadcrumbSegments.push({ full: subClean, short: subShort });
-  }
 
   if (loading) return <div className="flex items-center justify-center min-h-[70vh]"><Spinner size={32} /></div>;
 
@@ -631,16 +619,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
               {courseId && (
                 <span className="text-[10px] font-medium text-neutral-300 bg-white/[0.03] border border-white/[0.05] px-2.5 py-1">
                   {{adv:'Advanced',mx1:'Extension 1',mx2:'Extension 2'}[courseId]}
-                </span>
-              )}
-              {selectedTopicId && currentTopic && (
-                <span className="text-[10px] font-medium text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1">
-                  {currentTopic.name.split('(')[0].trim()}
-                </span>
-              )}
-              {selectedSubtopic && (
-                <span className="text-[10px] font-medium text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1">
-                  {selectedSubtopic.replace(/^[A-Z0-9.]+:\s*/, '')}
                 </span>
               )}
               <button onClick={() => { setLauncherCollapsed(false); setFilterBodyOpen(true); }}
@@ -932,10 +910,6 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                         <span>Year {yearLevel}</span>
                         <ChevronRight size={10} className="text-neutral-700" />
                         <span>{{adv:'Advanced',mx1:'Extension 1',mx2:'Extension 2'}[courseId]}</span>
-                        {selectedTopicId && (
-                          <><ChevronRight size={10} className="text-neutral-700" />
-                          <span>{currentTopic?.name.split('(')[0].trim().replace(/\b(\w)(\w+)\b/g,(_,a,b)=>a.toUpperCase()+b.toLowerCase())}</span></>
-                        )}
                       </span>
                     )}
                   </span>
@@ -958,10 +932,9 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                         {[
                           {id:1,label:'Year',active:step===1},
                           {id:2,label:'Course',active:step===2},
-                          {id:3,label:'Topics',active:step===3},
                         ].map(cat => (
                           <button key={cat.id}
-                            onClick={() => { if(cat.id<=step) setStep(cat.id as 1|2|3); }}
+                            onClick={() => { if(cat.id<=step) setStep(cat.id as 1|2); }}
                             disabled={cat.id>step}
                             className={`w-full text-left px-4 py-2.5 text-[12px] font-medium border-0 transition-colors ${
                               cat.active?'text-white':'text-neutral-600'
@@ -990,9 +963,9 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                         )}
                         {step===2&&(
                           <div className="space-y-1">
-                            <p className="text-[11px] text-neutral-500 mb-3">Select your course</p>
+                            <p className="text-[11px] text-neutral-500 mb-3">Select your course to start</p>
                             {(['adv','mx1','mx2'] as const).map(c => (
-                              <button key={c} onClick={() => { setCourseId(c); setSelectedTopicId(null); setSelectedSubtopic(null); setStep(3); }}
+                              <button key={c} onClick={() => { setCourseId(c); setSelectedTopicId(null); setSelectedSubtopic(null); handleGenerate(null, null, c); }}
                                 className={`w-full text-left px-4 py-2 text-[13px] border transition-colors no-round ${
                                   courseId===c
                                     ? 'bg-emerald-500/15 border-emerald-500/60 text-white'
@@ -1003,40 +976,8 @@ const Home: React.FC<HomeProps> = ({ sessionMode, onClearSession, historyQuestio
                             ))}
                           </div>
                         )}
-                        {step===3&&(
-                          <div className="space-y-0.5">
-                            <p className="text-[11px] text-neutral-500 mb-2">
-                              Topics <span className="text-neutral-700 mx-1">→</span> 
-                              {courseId === 'mx2' ? 'Ext 1 + Ext 2' : courseId === 'mx1' ? 'Advanced + Ext 1' : 'Advanced'}
-                            </p>
-                            {allTopics.map(t => (
-                              <button key={t.id} onClick={() => { handleTopicClick(t.id); handleGenerate(t.id, null, courseId); }}
-                                className={`w-full text-left px-4 py-2 text-[13px] border transition-colors no-round ${
-                                  selectedTopicId===t.id
-                                    ? 'bg-emerald-500/15 border-emerald-500/60 text-white'
-                                    : 'bg-white/[0.01] border-white/[0.04] text-neutral-400 hover:border-white/[0.08] hover:text-neutral-300'
-                                }`}>
-                                {t.name.split('(')[0].trim()}
-                              </button>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </div>
-
-
-                    {step>=2&&(
-                      <div className="border-t border-white/[0.04] px-5 py-3 flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-600">
-                          {selectedTopicId ? currentTopic?.name.split('(')[0].trim() : 'Select a topic'}
-                          {selectedSubtopic ? ` → ${selectedSubtopic.replace(/^[A-Z0-9.]+:\\s*/, '')}` : ''}
-                        </span>
-                        <button onClick={() => handleGenerate(null)} disabled={problemLoading}
-                          className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-[11px] font-bold border-0 transition-colors disabled:opacity-40">
-                          {problemLoading ? <Spinner size={12} /> : currentProblem ? 'Next Question' : 'Generate'}
-                        </button>
-                      </div>
-                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
