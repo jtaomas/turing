@@ -182,13 +182,27 @@ def next_question():
             ):
                 question_last_attempt[a.question_id] = a.created_at
 
+    TOPIC_MAP = {
+        'ma-f1': 'Functions', 'ma-t1': 'Trigonometry', 'ma-c1': 'Differentiation',
+        'ma-e1': 'Exponential and Logarithmic', 'ma-s1': 'Probability and Statistics',
+        'ma-f2': 'Functions', 'ma-t2': 'Trigonometry', 'ma-c234': 'Calculus Applications',
+        'ma-m1': 'Financial Mathematics', 'ma-s23': 'Statistical Analysis',
+        'me-f1': 'Functions', 'me-t12': 'Trigonometry', 'me-c1': 'Calculus',
+        'me-a1': 'Combinatorics', 'me-p1': 'Proof by Induction', 'me-v1': 'Vectors',
+        'me-t3': 'Trigonometry', 'me-c23': 'Calculus', 'me-s1': 'Binomial Distribution',
+        'mex-p12': 'Proof', 'mex-v1': '3D Vectors', 'mex-n12': 'Complex Numbers',
+        'mex-c1': 'Integration', 'mex-m1': 'Mechanics',
+    }
+    COURSE_MAP = {'adv': 'Advanced', 'mx1': 'Extension 1', 'mx2': 'Extension 2'}
     query = Question.query
     if topic_id:
-        query = query.filter(Question.topic_id == topic_id)
+        mapped_topic = TOPIC_MAP.get(topic_id, topic_id)
+        query = query.filter(Question.topic_id == mapped_topic)
     if subtopic:
         query = query.filter(Question.subtopic == subtopic)
     if course:
-        query = query.filter(Question.course == course)
+        mapped_course = COURSE_MAP.get(course, course)
+        query = query.filter(Question.course == mapped_course)
 
     all_questions = query.order_by(Question.difficulty).all()
 
